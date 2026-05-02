@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:sig_bengkel_motor_medan_baru/data/lokasi_repository.dart';
-import 'package:sig_bengkel_motor_medan_baru/logika/saw_logic.dart';
 
 class SawProcessPage extends StatefulWidget {
   const SawProcessPage({super.key});
@@ -12,16 +11,10 @@ class SawProcessPage extends StatefulWidget {
 }
 
 class _SawProcessPageState extends State<SawProcessPage> {
-  // Bobot Kriteria
-  final double wKepadatan = 0.4;
-  final double wHargaSewa = 0.3;
-  final double wJarak = 0.3;
-
   List<Map<String, dynamic>> _candidates = [];
   bool _isLoading = true;
 
   final LokasiRepository _repository = LokasiRepository();
-  final SawLogic _sawLogic = SawLogic();
 
   @override
   void initState() {
@@ -32,13 +25,8 @@ class _SawProcessPageState extends State<SawProcessPage> {
   Future<void> _fetchAndCalculate() async {
     setState(() => _isLoading = true);
     try {
-      final rawData = await _repository.fetchAllLokasi();
-      final processed = _sawLogic.calculateSAW(
-        rawData,
-        wKepadatan: wKepadatan,
-        wHargaSewa: wHargaSewa,
-        wJarak: wJarak,
-      );
+      // Sekarang mengambil data yang sudah dihitung oleh Supabase (View SAW)
+      final processed = await _repository.fetchSawRanking();
 
       setState(() {
         _candidates = processed;
@@ -46,7 +34,12 @@ class _SawProcessPageState extends State<SawProcessPage> {
       });
     } catch (e) {
       debugPrint("Error SAW: $e");
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
+      }
     }
   }
 
@@ -61,10 +54,11 @@ class _SawProcessPageState extends State<SawProcessPage> {
             pw.TableHelper.fromTextArray(
               headers: ['Ranking', 'Nama Lokasi', 'Skor Akhir'],
               data: _candidates.asMap().entries.map((entry) {
+                final score = (entry.value['skor_akhir'] ?? 0.0).toDouble();
                 return [
                   (entry.key + 1).toString(),
-                  entry.value['nama'],
-                  entry.value['skor'].toStringAsFixed(4)
+                  entry.value['nama'] ?? '?',
+                  score.toStringAsFixed(4)
                 ];
               }).toList(),
             ),
@@ -91,17 +85,27 @@ class _SawProcessPageState extends State<SawProcessPage> {
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Card(
+                    elevation: 4,
                     child: Padding(
                       padding: const EdgeInsets.all(12.0),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("Bobot Kriteria", style: TextStyle(fontWeight: FontWeight.bold)),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              Text("Kepadatan: ${(wKepadatan * 100).toInt()}%"),
-                              Text("Harga: ${(wHargaSewa * 100).toInt()}%"),
-                              Text("Jarak: ${(wJarak * 100).toInt()}%"),
+                          const Center(
+                            child: Text("Bobot Kriteria SAW",
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          ),
+                          const Divider(),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.center,
+                            children: const [
+                              _WeightChip(label: "C1 Kepadatan", weight: "25%"),
+                              _WeightChip(label: "C2 Jarak Jalan", weight: "20%"),
+                              _WeightChip(label: "C3 Pesaing", weight: "20%"),
+                              _WeightChip(label: "C4 Harga", weight: "15%"),
+                              _WeightChip(label: "C5 Luas", weight: "20%"),
                             ],
                           ),
                         ],
@@ -114,17 +118,41 @@ class _SawProcessPageState extends State<SawProcessPage> {
                     itemCount: _candidates.length,
                     itemBuilder: (context, index) {
                       final item = _candidates[index];
+                      // Pastikan field skor_akhir ada (sesuai View di Supabase)
+                      final double score = (item['skor_akhir'] ?? 0.0).toDouble();
                       return ListTile(
-                        leading: CircleAvatar(child: Text("${index + 1}")),
-                        title: Text(item['nama']),
-                        subtitle: Text("Skor Akhir: ${item['skor'].toStringAsFixed(4)}"),
-                        trailing: Icon(Icons.stars, color: index == 0 ? Colors.amber : Colors.grey),
+                        leading: CircleAvatar(
+                          backgroundColor: index == 0 ? Colors.amber : Colors.deepPurple[100],
+                          child: Text("${index + 1}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                        title: Text(item['nama'] ?? 'Tanpa Nama', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text("Skor Akhir: ${score.toStringAsFixed(4)}"),
+                        trailing: index == 0 
+                          ? const Icon(Icons.stars, color: Colors.amber) 
+                          : const Icon(Icons.location_on_outlined),
                       );
                     },
                   ),
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _WeightChip extends StatelessWidget {
+  final String label;
+  final String weight;
+  const _WeightChip({required this.label, required this.weight});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+        Text(weight, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ],
     );
   }
 }

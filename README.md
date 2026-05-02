@@ -55,3 +55,5 @@ nama,kategori,jalan,longitude,latitude,timestamp_utc
 * Perankingan lokasi terbaik untuk pendirian bengkel baru.
 * Visualisasi peta dengan layer buffer area dan marker kompetitor/fasum.
 
+# Web leaflet connection guide
+

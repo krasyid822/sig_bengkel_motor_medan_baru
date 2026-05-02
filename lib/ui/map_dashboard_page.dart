@@ -68,6 +68,30 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
           final point = LatLng(lat, long);
 
           // Marker
+          Color markerColor = Colors.blue;
+          IconData markerIcon = Icons.location_on;
+          double bufferRadius = 0;
+          Color bufferColor = Colors.blue.withValues(alpha: 0.2);
+
+          if (item['kategori'] == 'bengkel') {
+            markerColor = Colors.red;
+            markerIcon = Icons.settings_applications;
+            bufferRadius = 500; // Aturan README: Bengkel 500m
+            bufferColor = Colors.red.withValues(alpha: 0.2);
+          } else {
+            // Cek sub-kategori berdasarkan nama/jalan untuk Fasum
+            String nama = (item['nama'] ?? '').toString().toLowerCase();
+            if (nama.contains('jalan')) {
+              markerColor = Colors.orange;
+              bufferRadius = 200; // Aturan README: Jalan Utama 200m
+              bufferColor = Colors.orange.withValues(alpha: 0.2);
+            } else if (nama.contains('permukiman') || nama.contains('perumahan')) {
+              markerColor = Colors.green;
+              bufferRadius = 300; // Aturan README: Permukiman 300m
+              bufferColor = Colors.green.withValues(alpha: 0.2);
+            }
+          }
+
           _markers.add(
             Marker(
               point: point,
@@ -78,10 +102,8 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: Icon(
-                    item['kategori'] == 'bengkel' 
-                      ? Icons.settings_applications 
-                      : Icons.location_on,
-                    color: item['kategori'] == 'bengkel' ? Colors.red : Colors.blue,
+                    markerIcon,
+                    color: markerColor,
                     size: 30,
                   ),
                 ),
@@ -89,15 +111,15 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
             ),
           );
 
-          // Radius (Buffer) 500 meter untuk bengkel (kompetitor)
-          if (item['kategori'] == 'bengkel') {
+          // Radius (Buffer) sesuai aturan README
+          if (bufferRadius > 0) {
             _circles.add(
               CircleMarker(
                 point: point,
-                radius: 500, // dalam meter
+                radius: bufferRadius,
                 useRadiusInMeter: true,
-                color: Colors.red.withValues(alpha: 0.2),
-                borderColor: Colors.red,
+                color: bufferColor,
+                borderColor: markerColor,
                 borderStrokeWidth: 1,
               ),
             );
@@ -112,6 +134,7 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
   }
 
   void _showLocationDetail(Map<String, dynamic> data) {
+    // Cari ranking dari data jika ada (misal di masa depan kita join data)
     showModalBottomSheet(
       context: context,
       builder: (context) => Container(
@@ -124,6 +147,8 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
             const SizedBox(height: 10),
             Text("Kategori: ${data['kategori']?.toString().toUpperCase() ?? 'N/A'}"),
             Text("Jalan: ${data['jalan'] ?? 'N/A'}"),
+            if (data['skor_akhir'] != null)
+              Text("Skor SAW: ${data['skor_akhir'].toStringAsFixed(4)}", style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold)),
             const SizedBox(height: 15),
             if (data['foto_url'] != null)
               ClipRRect(
@@ -147,7 +172,7 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Dashboard Web GIS Medan Baru"),
+        title: const Text("GIS Bengkel Medan Baru"),
         actions: [
           IconButton(
             icon: const Icon(Icons.my_location),
@@ -216,12 +241,10 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
                     children: [
                       const Text("Legenda GIS", style: TextStyle(fontWeight: FontWeight.bold)),
                       const Divider(),
-                      _buildLegendItem(Icons.settings_applications, Colors.red, "Kompetitor (Bengkel)"),
-                      _buildLegendItem(Icons.location_on, Colors.blue, "Fasilitas Umum (Fasum)"),
-                      if (_showBoundary)
-                        _buildLegendItem(Icons.polyline, Colors.blue, "Batas Wilayah Medan Baru"),
-                      if (_showBuffers)
-                        _buildLegendItem(Icons.circle, Colors.red.withValues(alpha: 0.3), "Radius Buffer (500m)"),
+                      _buildLegendItem(Icons.settings_applications, Colors.red, "Bengkel/Pesaing (500m)"),
+                      _buildLegendItem(Icons.location_on, Colors.orange, "Jalan Utama (200m)"),
+                      _buildLegendItem(Icons.location_on, Colors.green, "Permukiman (300m)"),
+                      _buildLegendItem(Icons.location_on, Colors.blue, "Fasilitas Umum Lain"),
                     ],
                   ),
                 ),

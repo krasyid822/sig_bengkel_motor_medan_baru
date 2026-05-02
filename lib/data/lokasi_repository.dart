@@ -17,12 +17,25 @@ class LokasiRepository {
 
   Future<List<Map<String, dynamic>>> fetchRekomendasiLokasi() async {
     try {
+      // Mengambil data dari tabel lokasi untuk ditampilkan di peta
       final response = await _supabase
-          .from('leaflet_lokasi_rekomendasi')
+          .from('lokasi')
           .select('*, geometry:geom.ST_AsGeoJSON()');
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       throw Exception('Gagal mengambil data lokasi: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchSawRanking() async {
+    try {
+      // Mengambil hasil perhitungan SAW dari View di Supabase
+      final response = await _supabase
+          .from('v_rekomendasi_bengkel_saw')
+          .select('*');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      throw Exception('Gagal mengambil ranking SAW: $e');
     }
   }
 
