@@ -17,10 +17,10 @@ class LokasiRepository {
 
   Future<List<Map<String, dynamic>>> fetchRekomendasiLokasi() async {
     try {
-      // Mengambil data dari tabel lokasi untuk ditampilkan di peta
+      // Memanggil VIEW v_lokasi_peta yang sudah mengonversi geometry
       final response = await _supabase
-          .from('lokasi')
-          .select('*, geometry:geom.ST_AsGeoJSON()');
+          .from('v_lokasi_peta')
+          .select('*');
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       throw Exception('Gagal mengambil data lokasi: $e');
@@ -45,6 +45,14 @@ class LokasiRepository {
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       throw Exception('Gagal mengambil semua data lokasi: $e');
+    }
+  }
+
+  Future<void> deleteLokasi(String id) async {
+    try {
+      await _supabase.from('lokasi').delete().eq('id', id);
+    } catch (e) {
+      throw Exception('Gagal menghapus data: $e');
     }
   }
 

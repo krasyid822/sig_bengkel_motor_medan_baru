@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/csv_import_page.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/data_collection_page.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/documentation_page.dart';
@@ -50,6 +51,10 @@ class _MainPageState extends State<MainPage> {
   int _currentIndex = 2; // Default ke menu Input (index 2)
   late StreamSubscription _intentDataStreamSubscription;
   String? _sharedText;
+  
+  // State untuk navigasi ke lokasi spesifik di peta
+  LatLng? _targetLocation;
+  String? _targetLocationId;
 
   @override
   void initState() {
@@ -97,21 +102,35 @@ class _MainPageState extends State<MainPage> {
     super.dispose();
   }
 
+  void _onJumpToLocation(LatLng location, String id) {
+    setState(() {
+      _targetLocation = location;
+      _targetLocationId = id;
+      _currentIndex = 0; // Pindah ke tab Peta (index 0)
+    });
+  }
+
   List<Widget> _pages(String? initialText) => [
-    const MapDashboardPage(),    // Dashboard Peta (Leaflet)
-    const SawProcessPage(),      // Proses SAW & Ranking
-    DataCollectionPage(initialGmapsUrl: initialText),  // Manajemen Data / Input
-    const CsvImportPage(),       // Import CSV
-    const DocumentationPage(),   // Dokumentasi
+    MapDashboardPage(
+      targetLocation: _targetLocation, 
+      targetId: _targetLocationId,
+      onLocationHandled: () {
+        setState(() {
+          _targetLocation = null;
+          _targetLocationId = null;
+        });
+      },
+    ),
+    SawProcessPage(onLocationTap: _onJumpToLocation),
+    DataCollectionPage(initialGmapsUrl: initialText),
+    const CsvImportPage(),
+    const DocumentationPage(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages(_sharedText),
-      ),
+      body: _pages(_sharedText)[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {

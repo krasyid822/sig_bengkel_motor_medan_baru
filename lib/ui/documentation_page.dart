@@ -33,7 +33,21 @@ class DocumentationPage extends StatelessWidget {
             '1. Ambil foto lokasi sebagai bukti fisik.\n'
             '2. Deteksi lokasi via GPS otomatis.\n'
             '3. Bagikan langsung dari Google Maps: Pilih lokasi di Google Maps -> Klik Bagikan -> Pilih aplikasi ini untuk mengisi data secara otomatis.\n'
-            '4. Import/Export CSV untuk manajemen data massal.',
+            '4. Import/Export CSV untuk manajemen data massal.\n'
+            '5. Analisis Spasial Terpadu (Buffer & SAW).',
+          ),
+          _buildSection(
+            context,
+            'Metode Buffer & SAW (GIS Terpadu)',
+            'Sistem ini menggunakan penggabungan dua metode analisis SIG untuk menentukan lokasi bengkel terbaik:\n\n'
+            '1. METODE BUFFER (Jangkauan)\n'
+            '• Area Strategis (C2): Buffer 200m dari sarana jalan utama.\n'
+            '• Area Kompetisi (C3): Buffer 500m dari bengkel pesaing (area merah).\n\n'
+            '2. METODE SAW (Perankingan)\n'
+            'Melakukan perhitungan skor otomatis dari data GIS dengan bobot seimbang (50% - 50%):\n'
+            '• C2 - Jarak ke Jalan (Cost): Makin dekat ke jalan, skor makin tinggi.\n'
+            '• C3 - Jarak Pesaing (Benefit): Makin jauh dari pesaing, skor makin tinggi.\n\n'
+            'Tujuan: Mencari lokasi kandidat yang memiliki aksesibilitas terbaik namun memiliki persaingan terendah.',
           ),
           _buildSection(
             context,

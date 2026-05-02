@@ -220,18 +220,24 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lokasi belum didapatkan.')));
        return;
     }
-    if (_imageFile == null) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Foto bukti wajib diambil.')));
+    
+    // Dokumentasi hanya wajib untuk kategori selain 'kandidat'
+    if (_kategori != 'kandidat' && _imageFile == null) {
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Foto bukti wajib diambil untuk kategori ini.')));
        return;
     }
 
     setState(() {
       _isLoading = true;
-      _loadingMsg = 'Sedang mengunggah data...';
+      _loadingMsg = _kategori == 'kandidat' ? 'Sedang menganalisis data...' : 'Sedang mengunggah data...';
     });
 
     try {
-      String? fotoUrl = await _repository.uploadFoto(_imageFile!);
+      String? fotoUrl;
+      if (_imageFile != null) {
+        fotoUrl = await _repository.uploadFoto(_imageFile!);
+      }
+
       final data = {
         'nama': _namaController.text,
         'kategori': _kategori,
@@ -243,7 +249,7 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
       await _repository.insertBatchLokasi([data]);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Data berhasil dikirim!')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Analisis berhasil! Data telah ditambahkan ke sistem ranking.')));
         _namaController.clear();
         _jalanController.clear();
         setState(() {
@@ -282,7 +288,11 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
                     DropdownButtonFormField<String>(
                       initialValue: _kategori,
                       decoration: const InputDecoration(labelText: 'Kategori', border: OutlineInputBorder()),
-                      items: ['bengkel', 'fasum'].map((e) => DropdownMenuItem(value: e, child: Text(e.toUpperCase()))).toList(),
+                      items: [
+                        {'val': 'kandidat', 'label': 'KANDIDAT LOKASI BARU'},
+                        {'val': 'bengkel', 'label': 'BENGKEL (PESAING)'},
+                        {'val': 'fasum', 'label': 'FASILITAS UMUM / JALAN'},
+                      ].map((e) => DropdownMenuItem(value: e['val']!, child: Text(e['label']!))).toList(),
                       onChanged: (v) => setState(() => _kategori = v!),
                     ),
                     const SizedBox(height: 16),
@@ -345,7 +355,18 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
                       ),
                     ),
                     const SizedBox(height: 30),
-                    ElevatedButton(onPressed: _submitData, style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 15), backgroundColor: Colors.deepPurple, foregroundColor: Colors.white), child: const Text('SIMPAN DATA', style: TextStyle(fontSize: 16))),
+                    ElevatedButton(
+                      onPressed: _submitData, 
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 15), 
+                        backgroundColor: Colors.deepPurple, 
+                        foregroundColor: Colors.white
+                      ), 
+                      child: Text(
+                        _kategori == 'kandidat' ? 'ANALISIS LOKASI' : 'SIMPAN DATA', 
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)
+                      )
+                    ),
                   ],
                 ),
               ),

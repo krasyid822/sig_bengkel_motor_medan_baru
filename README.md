@@ -43,13 +43,15 @@ nama,kategori,jalan,longitude,latitude,timestamp_utc
 * **Bengkel Lain (Kompetitor):** 500 meter.
 
 ### 3. Kriteria SAW (Simple Additive Weighting)
-| Kode | Kriteria | Bobot | Jenis |
-|------|----------|-------|-------|
-| C1 | Kepadatan Penduduk | 25% | Benefit |
-| C2 | Jarak ke Jalan Utama | 20% | Cost |
-| C3 | Jarak Pesaing | 20% | Benefit |
-| C4 | Harga Sewa Tempat | 15% | Cost |
-| C5 | Luas Lahan | 20% | Benefit |
+*Catatan: Saat ini sistem menggunakan bobot GIS Terpadu (C2 & C3) untuk kalkulasi otomatis.*
+
+| Kode | Kriteria | Bobot (Final) | Jenis | Status |
+|------|----------|---------------|-------|--------|
+| C1 | Kepadatan Penduduk | - | Benefit | Placeholder |
+| C2 | Jarak ke Jalan Utama | 50% | Cost | Active (GIS) |
+| C3 | Jarak Pesaing | 50% | Benefit | Active (GIS) |
+| C4 | Harga Sewa Tempat | - | Cost | Placeholder |
+| C5 | Luas Lahan | - | Benefit | Placeholder |
 
 ### 4. Output Sistem
 * Perankingan lokasi terbaik untuk pendirian bengkel baru.

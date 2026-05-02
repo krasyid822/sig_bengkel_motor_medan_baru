@@ -5,7 +5,16 @@ import 'package:latlong2/latlong.dart';
 import 'package:sig_bengkel_motor_medan_baru/data/lokasi_repository.dart';
 
 class MapDashboardPage extends StatefulWidget {
-  const MapDashboardPage({super.key});
+  final LatLng? targetLocation;
+  final String? targetId;
+  final VoidCallback? onLocationHandled;
+
+  const MapDashboardPage({
+    super.key, 
+    this.targetLocation, 
+    this.targetId,
+    this.onLocationHandled,
+  });
 
   @override
   State<MapDashboardPage> createState() => _MapDashboardPageState();
@@ -16,28 +25,25 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
   final LokasiRepository _repository = LokasiRepository();
   List<Marker> _markers = [];
   List<CircleMarker> _circles = [];
+  List<Map<String, dynamic>> _rankingData = [];
   bool _isLoading = true;
   bool _showBuffers = true;
   bool _showBoundary = true;
 
-  // Koordinat Batas Wilayah Medan Baru (Sederhana)
+  // Koordinat Batas Wilayah Kecamatan Medan Baru yang lebih presisi
   final List<LatLng> _medanBaruBoundary = [
-    const LatLng(3.5950, 98.6510),
-    const LatLng(3.6030, 98.6530),
-    const LatLng(3.6055, 98.6555),
-    const LatLng(3.6040, 98.6590),
-    const LatLng(3.6015, 98.6645),
-    const LatLng(3.5985, 98.6695),
-    const LatLng(3.5910, 98.6710),
-    const LatLng(3.5850, 98.6700),
-    const LatLng(3.5760, 98.6670),
-    const LatLng(3.5680, 98.6630),
-    const LatLng(3.5665, 98.6580),
-    const LatLng(3.5690, 98.6520),
-    const LatLng(3.5750, 98.6480),
-    const LatLng(3.5820, 98.6465),
-    const LatLng(3.5890, 98.6475),
-    const LatLng(3.5950, 98.6510), // Tutup polygon
+    const LatLng(3.5924, 98.6515), // Utara-Barat (Darussalam/Gajah Mada)
+    const LatLng(3.5938, 98.6648), // Utara (Gajah Mada ke arah sungai)
+    const LatLng(3.5960, 98.6690), // Timur Laut (Dekat sungai Babura)
+    const LatLng(3.5900, 98.6675), // Mengikuti sungai Babura
+    const LatLng(3.5820, 98.6635), // Samping USU timur
+    const LatLng(3.5750, 98.6655), // Liku sungai
+    const LatLng(3.5685, 98.6650), // Liku sungai dekat Jamin Ginting
+    const LatLng(3.5645, 98.6625), // Tenggara (Sungai bertemu Jamin Ginting)
+    const LatLng(3.5650, 98.6525), // Selatan (Jamin Ginting dekat Darussalam)
+    const LatLng(3.5730, 98.6520), // Barat (Jl. Darussalam selatan)
+    const LatLng(3.5820, 98.6518), // Barat (Jl. Darussalam tengah)
+    const LatLng(3.5924, 98.6515), // Kembali ke awal
   ];
 
   @override
@@ -46,80 +52,114 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
     _fetchLocations();
   }
 
+  @override
+  void didUpdateWidget(MapDashboardPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Jika ada koordinat target, segera gerakkan kamera
+    if (widget.targetLocation != null && widget.targetLocation != oldWidget.targetLocation) {
+      _handleTargetNavigation();
+    }
+  }
+
+  void _handleTargetNavigation() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_mapController.camera.center != widget.targetLocation) {
+        _mapController.move(widget.targetLocation!, 17.0);
+      }
+      widget.onLocationHandled?.call();
+    });
+  }
+
   Future<void> _fetchLocations() async {
+    setState(() => _isLoading = true);
     try {
       final data = await _repository.fetchRekomendasiLokasi();
+      final ranking = await _repository.fetchSawRanking();
       
       setState(() {
+        _rankingData = ranking;
         _markers = [];
         _circles = [];
         
-        for (var item in data) {
-          if (item['geometry'] == null) continue;
+        // Map skor untuk pencarian cepat
+        final Map<String, double> scoreMap = {
+          for (var r in ranking) r['id'].toString(): (r['skor_akhir'] ?? 0.0).toDouble()
+        };
 
-          // Parsing GeoJSON geometry
-          final Map<String, dynamic> geometry = item['geometry'] is String 
-              ? jsonDecode(item['geometry']) 
-              : item['geometry'];
+        for (var item in data) {
+          // Mengambil dari field geometry_json (hasil ST_AsGeoJSON dari View)
+          final dynamic geomData = item['geometry_json'];
+          if (geomData == null) continue;
+
+          final Map<String, dynamic> geometry = geomData is String 
+              ? jsonDecode(geomData) 
+              : geomData;
           
           final List<dynamic> coordinates = geometry['coordinates'];
-          final double long = coordinates[0].toDouble();
-          final double lat = coordinates[1].toDouble();
-          final point = LatLng(lat, long);
+          final point = LatLng(coordinates[1].toDouble(), coordinates[0].toDouble());
+          final String id = item['id'].toString();
+          final String kategori = item['kategori']?.toString().toLowerCase() ?? '';
+          final String nama = (item['nama'] ?? '').toString().toLowerCase();
 
-          // Marker
-          Color markerColor = Colors.blue;
-          IconData markerIcon = Icons.location_on;
+          // Penentuan Visual Berdasarkan Aturan Buffer
+          Color themeColor = Colors.blue;
+          IconData iconData = Icons.location_on;
           double bufferRadius = 0;
-          Color bufferColor = Colors.blue.withValues(alpha: 0.2);
 
-          if (item['kategori'] == 'bengkel') {
-            markerColor = Colors.red;
-            markerIcon = Icons.settings_applications;
-            bufferRadius = 500; // Aturan README: Bengkel 500m
-            bufferColor = Colors.red.withValues(alpha: 0.2);
-          } else {
-            // Cek sub-kategori berdasarkan nama/jalan untuk Fasum
-            String nama = (item['nama'] ?? '').toString().toLowerCase();
-            if (nama.contains('jalan')) {
-              markerColor = Colors.orange;
-              bufferRadius = 200; // Aturan README: Jalan Utama 200m
-              bufferColor = Colors.orange.withValues(alpha: 0.2);
-            } else if (nama.contains('permukiman') || nama.contains('perumahan')) {
-              markerColor = Colors.green;
-              bufferRadius = 300; // Aturan README: Permukiman 300m
-              bufferColor = Colors.green.withValues(alpha: 0.2);
+          if (kategori == 'kandidat') {
+            // Ini adalah KANDIDAT BENGKEL
+            themeColor = Colors.amber;
+            iconData = Icons.stars;
+            item['is_candidate'] = true;
+            // Jika ada skor di view SAW, tempelkan
+            if (scoreMap.containsKey(id)) {
+               item['skor_akhir'] = scoreMap[id];
             }
+          } else if (kategori == 'bengkel') {
+            // Ini Pesaing (Bengkel eksisting) - Kriteria C3
+            themeColor = Colors.red;
+            iconData = Icons.settings_applications;
+            bufferRadius = 500;
+          } else if (nama.contains('jalan') || kategori == 'fasum') {
+            // Sarana Jalan / Fasum - Kriteria C2
+            themeColor = Colors.orange;
+            iconData = Icons.add_road;
+            bufferRadius = 200;
           }
 
+          // Marker
           _markers.add(
             Marker(
               point: point,
-              width: 50,
-              height: 50,
+              width: item['is_candidate'] == true ? 65 : 45,
+              height: item['is_candidate'] == true ? 65 : 45,
               child: GestureDetector(
                 onTap: () => _showLocationDetail(item),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Icon(
-                    markerIcon,
-                    color: markerColor,
-                    size: 30,
-                  ),
+                child: Column(
+                  children: [
+                    if (item['is_candidate'] == true)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(4)),
+                        child: Text("RANK ${ranking.indexWhere((r) => r['id'] == id) + 1}", 
+                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                      ),
+                    Icon(iconData, color: themeColor, size: item['is_candidate'] == true ? 35 : 28),
+                  ],
                 ),
               ),
             ),
           );
 
-          // Radius (Buffer) sesuai aturan README
+          // Buffer Layer
           if (bufferRadius > 0) {
             _circles.add(
               CircleMarker(
                 point: point,
                 radius: bufferRadius,
                 useRadiusInMeter: true,
-                color: bufferColor,
-                borderColor: markerColor,
+                color: themeColor.withValues(alpha: 0.15),
+                borderColor: themeColor,
                 borderStrokeWidth: 1,
               ),
             );
@@ -128,7 +168,7 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint("Error fetching map data: $e");
+      debugPrint("Error Map: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -239,16 +279,45 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text("Legenda GIS", style: TextStyle(fontWeight: FontWeight.bold)),
+                      const Text("Legenda Analisis GIS", style: TextStyle(fontWeight: FontWeight.bold)),
                       const Divider(),
-                      _buildLegendItem(Icons.settings_applications, Colors.red, "Bengkel/Pesaing (500m)"),
-                      _buildLegendItem(Icons.location_on, Colors.orange, "Jalan Utama (200m)"),
-                      _buildLegendItem(Icons.location_on, Colors.green, "Permukiman (300m)"),
-                      _buildLegendItem(Icons.location_on, Colors.blue, "Fasilitas Umum Lain"),
+                      _buildLegendItem(Icons.stars, Colors.amber, "Kandidat Bengkel Baru"),
+                      _buildLegendItem(Icons.settings_applications, Colors.red, "Pesaing (C3: Radius 500m)"),
+                      _buildLegendItem(Icons.add_road, Colors.orange, "Akses Jalan (C2: Radius 200m)"),
+                      if (_showBoundary)
+                        _buildLegendItem(Icons.polyline, Colors.blue, "Batas Wilayah"),
                     ],
                   ),
                 ),
               ),
+              // Top Ranking Panel
+              if (_rankingData.isNotEmpty)
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    width: 180,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [const BoxShadow(color: Colors.black12, blurRadius: 4)],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text("Top 3 Rekomendasi", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        const Divider(height: 8),
+                        ..._rankingData.take(3).map((r) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text("${_rankingData.indexOf(r) + 1}. ${r['nama']}", 
+                            style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis),
+                        )),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
       floatingActionButton: FloatingActionButton(
