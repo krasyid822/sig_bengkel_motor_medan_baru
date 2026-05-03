@@ -45,13 +45,6 @@
                 <data android:mimeType="application/csv" />
             </intent-filter>
 
-            <!-- Intent Filter untuk "Share" Teks/URL (Gmaps) -->
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
-            </intent-filter>
-
             <!-- Intent Filter untuk "Share" File CSV -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

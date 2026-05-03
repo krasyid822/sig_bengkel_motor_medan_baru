@@ -31,23 +31,24 @@ class DocumentationPage extends StatelessWidget {
             context,
             'Fitur Unggulan',
             '1. Ambil foto lokasi sebagai bukti fisik.\n'
-            '2. Deteksi lokasi via GPS otomatis.\n'
-            '3. Bagikan langsung dari Google Maps: Pilih lokasi di Google Maps -> Klik Bagikan -> Pilih aplikasi ini untuk mengisi data secara otomatis.\n'
-            '4. Import/Export CSV untuk manajemen data massal.\n'
-            '5. Analisis Spasial Terpadu (Buffer & SAW).',
+            '2. Deteksi lokasi via GPS otomatis dengan akurasi tinggi.\n'
+            '3. Pencarian Koordinat otomatis berdasarkan Alamat Lengkap (Geocoding).\n'
+            '4. Input Koordinat Manual (Latitude & Longitude) untuk fleksibilitas data.\n'
+            '5. Import/Export CSV untuk manajemen data massal.\n'
+            '6. Analisis Spasial Terpadu (Buffer & SAW).',
           ),
           _buildSection(
             context,
             'Metode Buffer & SAW (GIS Terpadu)',
             'Sistem ini menggunakan penggabungan dua metode analisis SIG untuk menentukan lokasi bengkel terbaik:\n\n'
             '1. METODE BUFFER (Jangkauan)\n'
-            '• Area Strategis (C2): Buffer 200m dari sarana jalan utama.\n'
-            '• Area Kompetisi (C3): Buffer 500m dari bengkel pesaing (area merah).\n\n'
+            '• Area Aksesibilitas (C2): Radius 200m dari titik jalan/fasum pendukung.\n'
+            '• Area Kompetisi (C3): Radius 500m dari bengkel pesaing.\n\n'
             '2. METODE SAW (Perankingan)\n'
             'Melakukan perhitungan skor otomatis dari data GIS dengan bobot seimbang (50% - 50%):\n'
-            '• C2 - Jarak ke Jalan (Cost): Makin dekat ke jalan, skor makin tinggi.\n'
+            '• C2 - Aksesibilitas (Cost): Makin dekat ke akses, skor makin tinggi.\n'
             '• C3 - Jarak Pesaing (Benefit): Makin jauh dari pesaing, skor makin tinggi.\n\n'
-            'Tujuan: Mencari lokasi kandidat yang memiliki aksesibilitas terbaik namun memiliki persaingan terendah.',
+            'PENTING: Bobot aslinya adalah 20% per kriteria (untuk 5 kriteria). Namun, karena C1, C4, dan C5 belum aktif, bobot didistribusikan ulang (Normalisasi) ke kriteria yang aktif (C2 & C3) masing-masing menjadi 50% agar total skor tetap 100% dan hasil perankingan tetap akurat secara matematis.',
           ),
           _buildSection(
             context,

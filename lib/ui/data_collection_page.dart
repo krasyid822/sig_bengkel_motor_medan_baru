@@ -1,15 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:sig_bengkel_motor_medan_baru/data/lokasi_repository.dart';
-import 'package:sig_bengkel_motor_medan_baru/logika/gmaps_logic.dart';
 import 'package:sig_bengkel_motor_medan_baru/logika/location_service.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/camera_screen.dart';
 
 class DataCollectionPage extends StatefulWidget {
-  final String? initialGmapsUrl;
-  const DataCollectionPage({super.key, this.initialGmapsUrl});
+  const DataCollectionPage({super.key});
 
   @override
   State<DataCollectionPage> createState() => _DataCollectionPageState();
@@ -19,103 +17,22 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
   final _formKey = GlobalKey<FormState>();
   final _namaController = TextEditingController();
   final _jalanController = TextEditingController();
-  final _gmapsUrlController = TextEditingController();
+  final _latController = TextEditingController();
+  final _lngController = TextEditingController();
+  
   String _kategori = 'bengkel';
-  Position? _currentPosition;
   File? _imageFile;
   bool _isLoading = false;
   String _loadingMsg = 'Mohon tunggu...';
   
   final LokasiRepository _repository = LokasiRepository();
-  final GmapsLogic _gmapsLogic = GmapsLogic();
   final LocationService _locationService = LocationService();
   final ImagePicker _picker = ImagePicker();
-  
-  bool _useGmapsUrl = false;
-  String _coordsSource = 'GPS HP';
 
   @override
   void initState() {
     super.initState();
     _determinePosition();
-    
-    if (widget.initialGmapsUrl != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _gmapsUrlController.text = widget.initialGmapsUrl!;
-        _useGmapsUrl = true;
-        _parseGmapsUrl(widget.initialGmapsUrl!);
-      });
-    }
-  }
-
-  @override
-  void didUpdateWidget(DataCollectionPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.initialGmapsUrl != null && widget.initialGmapsUrl != oldWidget.initialGmapsUrl) {
-      _gmapsUrlController.text = widget.initialGmapsUrl!;
-      _useGmapsUrl = true;
-      _parseGmapsUrl(widget.initialGmapsUrl!);
-    }
-  }
-
-  Future<void> _parseGmapsUrl(String rawText) async {
-    if (rawText.isEmpty) return;
-
-    setState(() {
-      _isLoading = true;
-      _loadingMsg = 'Sedang mengekstrak lokasi dari teks/URL...';
-    });
-
-    try {
-      final result = await _gmapsLogic.parseUrl(rawText);
-
-      setState(() {
-        if (result.name != null && result.name!.isNotEmpty) {
-          _namaController.text = result.name!;
-        }
-        
-        if (result.latitude != null && result.longitude != null) {
-          _coordsSource = 'Google Maps URL';
-          _currentPosition = Position(
-            latitude: result.latitude!,
-            longitude: result.longitude!,
-            timestamp: DateTime.now(),
-            accuracy: 0,
-            altitude: 0,
-            heading: 0,
-            speed: 0,
-            speedAccuracy: 0,
-            altitudeAccuracy: 0,
-            headingAccuracy: 0,
-          );
-        }
-
-        if (result.photoFile != null) {
-          _imageFile = result.photoFile;
-        }
-      });
-
-      if (_currentPosition != null) {
-        await _getAddressFromLatLng();
-      }
-
-      if (mounted) {
-        final photoMsg = _imageFile == null 
-            ? '(Foto tidak ditemukan, silakan ambil foto manual)' 
-            : '(Foto berhasil dimuat)';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Data lokasi & nama berhasil diambil! $photoMsg'))
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal membaca URL: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
   }
 
   Future<void> _determinePosition() async {
@@ -125,10 +42,13 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
     });
     try {
       final position = await _locationService.getCurrentPosition();
-      setState(() {
-        _currentPosition = position;
-        _coordsSource = 'GPS HP (Live)';
-      });
+      if (position != null) {
+        setState(() {
+          _latController.text = position.latitude.toString();
+          _lngController.text = position.longitude.toString();
+        });
+        await _getAddressFromLatLng(position.latitude, position.longitude);
+      }
     } catch (e) {
       debugPrint("Error determine position: $e");
       if (mounted) {
@@ -139,19 +59,9 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
     }
   }
 
-  Future<void> _getAddressFromLatLng() async {
-    if (_currentPosition == null) return;
-
-    setState(() {
-      _isLoading = true;
-      _loadingMsg = 'Sedang mendapatkan alamat...';
-    });
+  Future<void> _getAddressFromLatLng(double lat, double lng) async {
     try {
-      final address = await _locationService.getAddressFromLatLng(
-        _currentPosition!.latitude,
-        _currentPosition!.longitude,
-      );
-
+      final address = await _locationService.getAddressFromLatLng(lat, lng);
       if (address != null) {
         setState(() {
           _jalanController.text = address;
@@ -159,6 +69,38 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
       }
     } catch (e) {
       debugPrint("Error get address: $e");
+    }
+  }
+
+  Future<void> _getLatLngFromAddress() async {
+    final address = _jalanController.text.trim();
+    if (address.isEmpty) return;
+
+    setState(() {
+      _isLoading = true;
+      _loadingMsg = 'Mencari koordinat dari alamat...';
+    });
+
+    try {
+      List<Location> locations = await locationFromAddress(address);
+      if (locations.isNotEmpty) {
+        final loc = locations.first;
+        setState(() {
+          _latController.text = loc.latitude.toString();
+          _lngController.text = loc.longitude.toString();
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Koordinat berhasil diperbarui berdasarkan alamat.'))
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Alamat tidak ditemukan: $e'))
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -216,12 +158,15 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
 
   Future<void> _submitData() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_currentPosition == null) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lokasi belum didapatkan.')));
+    
+    final double? lat = double.tryParse(_latController.text);
+    final double? lng = double.tryParse(_lngController.text);
+
+    if (lat == null || lng == null) {
+       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Format koordinat tidak valid.')));
        return;
     }
     
-    // Dokumentasi hanya wajib untuk kategori selain 'kandidat'
     if (_kategori != 'kandidat' && _imageFile == null) {
        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Foto bukti wajib diambil untuk kategori ini.')));
        return;
@@ -229,7 +174,7 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
 
     setState(() {
       _isLoading = true;
-      _loadingMsg = _kategori == 'kandidat' ? 'Sedang menganalisis data...' : 'Sedang mengunggah data...';
+      _loadingMsg = 'Sedang menyimpan data...';
     });
 
     try {
@@ -242,20 +187,18 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
         'nama': _namaController.text,
         'kategori': _kategori,
         'jalan': _jalanController.text,
-        'geom': 'POINT(${_currentPosition!.longitude} ${_currentPosition!.latitude})',
+        'geom': 'POINT($lng $lat)',
         'created_at': DateTime.now().toIso8601String(),
         'foto_url': fotoUrl,
       };
       await _repository.insertBatchLokasi([data]);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Analisis berhasil! Data telah ditambahkan ke sistem ranking.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Data berhasil disimpan!')));
         _namaController.clear();
         _jalanController.clear();
         setState(() {
           _imageFile = null;
-          _useGmapsUrl = false;
-          _gmapsUrlController.clear();
         });
         _determinePosition();
       }
@@ -296,30 +239,47 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
                       onChanged: (v) => setState(() => _kategori = v!),
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(child: ChoiceChip(label: const Text('GPS HP'), selected: !_useGmapsUrl, onSelected: (val) { setState(() => _useGmapsUrl = !val); if (val) _determinePosition(); })),
-                        const SizedBox(width: 8),
-                        Expanded(child: ChoiceChip(label: const Text('URL Gmaps'), selected: _useGmapsUrl, onSelected: (val) => setState(() => _useGmapsUrl = val))),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    if (_useGmapsUrl)
-                      TextFormField(
-                        controller: _gmapsUrlController,
-                        decoration: InputDecoration(
-                          labelText: 'URL Google Maps',
-                          border: const OutlineInputBorder(),
-                          prefixIcon: const Icon(Icons.link),
-                          suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: () => _parseGmapsUrl(_gmapsUrlController.text)),
-                        ),
-                        onChanged: (val) { if (val.length > 20) _parseGmapsUrl(val); },
-                      ),
-                    const SizedBox(height: 16),
                     TextFormField(
                       controller: _jalanController,
-                      decoration: InputDecoration(labelText: 'Alamat', border: const OutlineInputBorder(), prefixIcon: const Icon(Icons.map), suffixIcon: IconButton(icon: const Icon(Icons.auto_fix_high), onPressed: _getAddressFromLatLng)),
+                      decoration: InputDecoration(
+                        labelText: 'Alamat Lengkap', 
+                        hintText: 'Masukkan alamat untuk mencari koordinat',
+                        border: const OutlineInputBorder(), 
+                        prefixIcon: const Icon(Icons.map), 
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.location_searching),
+                          onPressed: _getLatLngFromAddress,
+                          tooltip: 'Cari Koordinat dari Alamat',
+                        )
+                      ),
                       validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _latController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(labelText: 'Latitude', border: OutlineInputBorder()),
+                            validator: (v) => v == null || v.isEmpty ? 'Wajib' : null,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _lngController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(labelText: 'Longitude', border: OutlineInputBorder()),
+                            validator: (v) => v == null || v.isEmpty ? 'Wajib' : null,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _determinePosition, 
+                          icon: const Icon(Icons.my_location, color: Colors.blue),
+                          tooltip: 'Ambil dari GPS HP',
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 20),
                     const Text('Foto Dokumentasi:', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -332,26 +292,6 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
                         child: _imageFile != null
                             ? ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(_imageFile!, fit: BoxFit.cover))
                             : const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.camera_alt, size: 50, color: Colors.grey), Text('Ambil Foto')]),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Card(
-                      color: Colors.blue.shade50,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          children: [
-                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                const Text('Koordinat:', style: TextStyle(fontWeight: FontWeight.bold)),
-                                Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: _coordsSource.contains('GPS') ? Colors.green : Colors.orange, borderRadius: BorderRadius.circular(4)), child: Text('Sumber: $_coordsSource', style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold))),
-                              ]),
-                              IconButton(onPressed: _determinePosition, icon: const Icon(Icons.refresh, color: Colors.blue)),
-                            ]),
-                            const SizedBox(height: 8),
-                            _currentPosition == null ? const Text('Mencari lokasi...') : Text('Lat: ${_currentPosition!.latitude}\nLong: ${_currentPosition!.longitude}'),
-                          ],
-                        ),
                       ),
                     ),
                     const SizedBox(height: 30),

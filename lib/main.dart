@@ -50,7 +50,6 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   int _currentIndex = 2; // Default ke menu Input (index 2)
   late StreamSubscription _intentDataStreamSubscription;
-  String? _sharedText;
   
   // State untuk navigasi ke lokasi spesifik di peta
   LatLng? _targetLocation;
@@ -81,14 +80,7 @@ class _MainPageState extends State<MainPage> {
     if (value.isNotEmpty) {
       final sharedFile = value.first;
       
-      // Di versi terbaru plugin (1.8+), teks/URL juga masuk sebagai SharedMediaFile
-      // dengan type .text atau .url, dan isinya ada di properti .path
-      if (sharedFile.type == SharedMediaType.text || sharedFile.type == SharedMediaType.url) {
-        setState(() {
-          _sharedText = sharedFile.path;
-          _currentIndex = 2; // Pindah ke tab Input
-        });
-      } else if (sharedFile.path.toLowerCase().endsWith('.csv')) {
+      if (sharedFile.path.toLowerCase().endsWith('.csv')) {
         setState(() {
           _currentIndex = 3; // Pindah ke tab CSV
         });
@@ -110,7 +102,7 @@ class _MainPageState extends State<MainPage> {
     });
   }
 
-  List<Widget> _pages(String? initialText) => [
+  List<Widget> _pages() => [
     MapDashboardPage(
       targetLocation: _targetLocation, 
       targetId: _targetLocationId,
@@ -122,7 +114,7 @@ class _MainPageState extends State<MainPage> {
       },
     ),
     SawProcessPage(onLocationTap: _onJumpToLocation),
-    DataCollectionPage(initialGmapsUrl: initialText),
+    const DataCollectionPage(),
     const CsvImportPage(),
     const DocumentationPage(),
   ];
@@ -130,7 +122,7 @@ class _MainPageState extends State<MainPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _pages(_sharedText)[_currentIndex],
+      body: _pages()[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {

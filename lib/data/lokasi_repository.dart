@@ -48,10 +48,29 @@ class LokasiRepository {
     }
   }
 
-  Future<void> deleteLokasi(String id) async {
+  Future<void> deleteLokasi(dynamic id) async {
     try {
-      await _supabase.from('lokasi').delete().eq('id', id);
+      // DIAGNOSTIK: Cek apakah data ada sebelum dihapus
+      final check = await _supabase.from('lokasi').select('id').eq('id', id).maybeSingle();
+      
+      if (check == null) {
+        debugPrint("DIAGNOSTIK: ID '$id' BENAR-BENAR TIDAK ADA di tabel 'lokasi'. Ini berarti ID dari View bukan ID asli tabel.");
+        throw Exception("ID dari View tidak cocok dengan ID di tabel utama.");
+      }
+
+      debugPrint("DIAGNOSTIK: ID ditemukan. Mencoba menghapus...");
+      
+      // Jika data ada tapi response delete kosong, berarti masalahnya adalah RLS Policy di Supabase
+      final response = await _supabase.from('lokasi').delete().eq('id', id).select();
+      
+      if (response.isEmpty) {
+        debugPrint("DIAGNOSTIK: Delete berhasil dipanggil tapi nol baris terhapus. Periksa RLS Policy (DELETE) di Dashboard Supabase!");
+        throw Exception("Izin hapus ditolak. Periksa kebijakan RLS di Supabase.");
+      }
+      
+      debugPrint("Berhasil menghapus data dengan ID: $id");
     } catch (e) {
+      debugPrint("Error detail: $e");
       throw Exception('Gagal menghapus data: $e');
     }
   }

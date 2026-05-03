@@ -72,7 +72,7 @@ class _SawProcessPageState extends State<SawProcessPage> {
     await Printing.layoutPdf(onLayout: (format) => pdf.save());
   }
 
-  Future<void> _deleteLocation(String id, String name) async {
+  Future<void> _deleteLocation(dynamic id, String name) async {
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -93,7 +93,18 @@ class _SawProcessPageState extends State<SawProcessPage> {
       setState(() => _isLoading = true);
       try {
         await _repository.deleteLokasi(id);
+        
+        // Hapus dari state lokal segera agar UI merespon cepat
+        setState(() {
+          _candidates.removeWhere((item) => 
+            item['id'].toString() == id.toString() || 
+            item['lokasi_id']?.toString() == id.toString()
+          );
+        });
+
+        // Refresh data dari server untuk memperbarui ranking/skor kandidat lain
         await _fetchAndCalculate();
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Data berhasil dihapus.")));
         }
@@ -141,7 +152,7 @@ class _SawProcessPageState extends State<SawProcessPage> {
                             runSpacing: 8,
                             alignment: WrapAlignment.center,
                             children: const [
-                              _WeightChip(label: "C2 Jarak Jalan (Cost)", weight: "50%"),
+                              _WeightChip(label: "C2 Aksesibilitas (Cost)", weight: "50%"),
                               _WeightChip(label: "C3 Jarak Pesaing (Benefit)", weight: "50%"),
                             ],
                           ),
@@ -177,7 +188,8 @@ class _SawProcessPageState extends State<SawProcessPage> {
                               final double lng = coordinates[0].toDouble();
                               final double lat = coordinates[1].toDouble();
                               
-                              widget.onLocationTap!(LatLng(lat, lng), item['id'].toString());
+                              final jumpId = (item['lokasi_id'] ?? item['id']).toString();
+                              widget.onLocationTap!(LatLng(lat, lng), jumpId);
                             } catch (e) {
                               debugPrint("Error navigating from SAW: $e");
                             }
@@ -198,7 +210,21 @@ class _SawProcessPageState extends State<SawProcessPage> {
                               const Icon(Icons.location_on_outlined),
                             IconButton(
                               icon: const Icon(Icons.delete_outline, color: Colors.red),
-                              onPressed: () => _deleteLocation(item['id'].toString(), item['nama'] ?? 'Tanpa Nama'),
+                              onPressed: () {
+                                // Log data untuk debug jika masih gagal
+                                debugPrint("DEBUG: Data Item Lengkap: $item");
+                                
+                                // Mencari ID asli tabel (biasanya aliased sebagai lokasi_id, gid, atau tetap id)
+                                final deleteId = item['lokasi_id'] ?? item['id'];
+
+                                if (deleteId != null) {
+                                  _deleteLocation(deleteId, item['nama'] ?? 'Tanpa Nama');
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Gagal: ID data tidak ditemukan."))
+                                  );
+                                }
+                              },
                             ),
                           ],
                         ),

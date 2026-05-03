@@ -62,11 +62,19 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
   }
 
   void _handleTargetNavigation() {
+    // Memberi sedikit jeda agar FlutterMap benar-benar siap setelah _isLoading = false
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_mapController.camera.center != widget.targetLocation) {
-        _mapController.move(widget.targetLocation!, 17.0);
+      if (!mounted) return;
+      
+      try {
+        debugPrint("Navigating map to: ${widget.targetLocation}");
+        _mapController.move(widget.targetLocation!, 17.5); // Zoom lebih dekat (17.5)
+        
+        // Panggil callback agar state target di MainPage dibersihkan
+        widget.onLocationHandled?.call();
+      } catch (e) {
+        debugPrint("Gagal navigasi peta: $e");
       }
-      widget.onLocationHandled?.call();
     });
   }
 
@@ -76,6 +84,8 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
       final data = await _repository.fetchRekomendasiLokasi();
       final ranking = await _repository.fetchSawRanking();
       
+      if (!mounted) return;
+
       setState(() {
         _rankingData = ranking;
         _markers = [];
@@ -83,10 +93,13 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
         
         // Map skor untuk pencarian cepat
         final Map<String, double> scoreMap = {
-          for (var r in ranking) r['id'].toString(): (r['skor_akhir'] ?? 0.0).toDouble()
+          for (var r in ranking) r['id'].toString(): (r['skor_akhir'] ?? 0.0).toDouble(),
+          // Tambahkan mapping untuk lokasi_id jika view SAW menggunakan alias
+          for (var r in ranking) if (r['lokasi_id'] != null) r['lokasi_id'].toString(): (r['skor_akhir'] ?? 0.0).toDouble()
         };
 
         for (var item in data) {
+          // ... (logika pembuatan marker dan circle tetap sama)
           // Mengambil dari field geometry_json (hasil ST_AsGeoJSON dari View)
           final dynamic geomData = item['geometry_json'];
           if (geomData == null) continue;
@@ -167,6 +180,11 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
         }
         _isLoading = false;
       });
+
+      // Navigasi ke target jika ada (setelah loading selesai dan peta dirender)
+      if (widget.targetLocation != null) {
+        _handleTargetNavigation();
+      }
     } catch (e) {
       debugPrint("Error Map: $e");
       if (mounted) setState(() => _isLoading = false);
@@ -283,7 +301,7 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
                       const Divider(),
                       _buildLegendItem(Icons.stars, Colors.amber, "Kandidat Bengkel Baru"),
                       _buildLegendItem(Icons.settings_applications, Colors.red, "Pesaing (C3: Radius 500m)"),
-                      _buildLegendItem(Icons.add_road, Colors.orange, "Akses Jalan (C2: Radius 200m)"),
+                      _buildLegendItem(Icons.add_road, Colors.orange, "Akses & Fasum (C2: Radius 200m)"),
                       if (_showBoundary)
                         _buildLegendItem(Icons.polyline, Colors.blue, "Batas Wilayah"),
                     ],
