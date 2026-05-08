@@ -21,11 +21,39 @@ samples, guidance on mobile development, and a full API reference.
 CREATE TABLE lokasi (
 id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 nama text NOT NULL,
-kategori text CHECK (kategori IN ('bengkel', 'fasum')),
+kategori text CHECK (kategori IN ('bengkel', 'fasum', 'kandidat')),
 jalan text,
 geom geometry(Point, 4326) NOT NULL,
+foto_url text,
 created_at timestamptz DEFAULT now()
 );
+
+-- Tabel Aturan (Buffer & SAW)
+CREATE TABLE aturan_sig (
+    id serial PRIMARY KEY,
+    kode_kriteria text UNIQUE, -- C1, C2, C3, dll
+    nama_kriteria text,
+    bobot numeric, -- 0.5 (50%)
+    radius_buffer integer, -- 200, 500
+    tipe_kriteria text -- cost/benefit
+);
+
+INSERT INTO aturan_sig (kode_kriteria, nama_kriteria, bobot, radius_buffer, tipe_kriteria) VALUES
+('C2', 'Aksesibilitas', 0.5, 200, 'cost'),
+('C3', 'Jarak Pesaing', 0.5, 500, 'benefit'),
+('BOUNDARY', '[[3.584883, 98.653078], [3.584095338570799, 98.66784569392829], [3.546981822889294, 98.65923996108863], [3.5469941868443997, 98.65213610608484]]', 0, 0, 'wilayah');
+
+### Penting: Konfigurasi Row Level Security (RLS)
+Agar aplikasi dapat membaca tabel `aturan_sig` melalui API/Anon Key, Anda **WAJIB** mengatur Policies di Dashboard Supabase:
+1. Masuk ke **Authentication > Policies**.
+2. Pilih tabel `aturan_sig`.
+3. Klik **New Policy** > **Create a policy from scratch**.
+4. Pilih **Allowed Operation: SELECT**.
+5. Pilih **Target Roles: anon**.
+6. Pada bagian **Using expression**, masukkan: `true`.
+7. Klik **Save Policy**.
+
+*Lakukan hal yang sama (SELECT & INSERT) untuk tabel `lokasi` agar data dapat tersimpan.*
 
 # Format Dataset CSV
 
@@ -59,8 +87,9 @@ nama,kategori,jalan,longitude,latitude,timestamp_utc
 * Visualisasi peta dengan layer buffer area dan marker kompetitor/fasum.
 
 ### 5. Catatan Pengembangan & Fitur Masa Depan
-*   **Optimasi Kategori Spasial (Point B):** Memisahkan input "Akses Jalan" (Line/Point Road) dengan "Fasilitas Umum" (Point Interest) agar analisis C2 lebih spesifik pada aksesibilitas transportasi.
-*   **Refinement SQL View (Point C):** Mengoptimalkan query `v_rekomendasi_bengkel_saw` di Supabase agar hanya menghitung jarak ke kategori jalan murni (bukan fasum general) untuk kriteria Cost.
+*   **Otomasi Buffer & SAW (Backend Sync):** Sistem telah diperbarui untuk membaca kriteria langsung dari tabel `aturan_sig`. Pastikan View di database menggunakan subquery ke tabel ini agar sinkronisasi 100% otomatis.
+*   **Keamanan Hitungan Database:** Query View `v_rekomendasi_bengkel_saw` secara spesifik memanggil `WHERE kode_kriteria = 'C2'` dan `'C3'`. Jadi, meskipun ada banyak baris baru di tabel `aturan_sig` (seperti data `BOUNDARY`), hitungan SAW di database tidak akan berubah kecuali Anda mengubah Query SQL-nya.
+*   **Optimasi Kategori Spasial:** Memisahkan input "Akses Jalan" (Line/Point Road) dengan "Fasilitas Umum" (Point Interest) agar analisis C2 lebih spesifik pada aksesibilitas transportasi.
 *   **Data Dinamis C1, C4, C5:** Integrasi API kependudukan atau form input manual untuk melengkapi kriteria non-GIS.
 *   **Pengembangan Layer Spasial:** Menambahkan layer buffer untuk area permukiman (target 300 meter) sebagai pendukung kriteria C1 (Kepadatan Penduduk) di masa depan.
 

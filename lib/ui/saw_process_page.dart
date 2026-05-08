@@ -15,6 +15,7 @@ class SawProcessPage extends StatefulWidget {
 
 class _SawProcessPageState extends State<SawProcessPage> {
   List<Map<String, dynamic>> _candidates = [];
+  List<Map<String, dynamic>> _rules = []; // Aturan bobot dari DB
   bool _isLoading = true;
 
   final LokasiRepository _repository = LokasiRepository();
@@ -28,10 +29,14 @@ class _SawProcessPageState extends State<SawProcessPage> {
   Future<void> _fetchAndCalculate() async {
     setState(() => _isLoading = true);
     try {
-      // Sekarang mengambil data yang sudah dihitung oleh Supabase (View SAW)
+      // 1. Ambil Aturan Bobot
+      final rules = await _repository.fetchAturan();
+      
+      // 2. Ambil Data Ranking yang sudah dihitung oleh Supabase
       final processed = await _repository.fetchSawRanking();
 
       setState(() {
+        _rules = rules;
         _candidates = processed;
         _isLoading = false;
       });
@@ -151,14 +156,24 @@ class _SawProcessPageState extends State<SawProcessPage> {
                             spacing: 12,
                             runSpacing: 8,
                             alignment: WrapAlignment.center,
-                            children: const [
-                              _WeightChip(label: "C2 Aksesibilitas (Cost)", weight: "50%"),
-                              _WeightChip(label: "C3 Jarak Pesaing (Benefit)", weight: "50%"),
-                            ],
+                            children: _rules.isEmpty 
+                              ? [
+                                  const Text("Aturan tidak ditemukan di Database.", 
+                                  style: TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.bold))
+                                ]
+                              : _rules
+                                  .where((r) => r['tipe_kriteria'] != 'wilayah') // Filter agar Boundary tidak muncul
+                                  .map((rule) {
+                                    final double bobotPct = (rule['bobot'] as num) * 100;
+                                    return _WeightChip(
+                                      label: "${rule['kode_kriteria']} ${rule['nama_kriteria']} (${rule['tipe_kriteria']})", 
+                                      weight: "${bobotPct.toStringAsFixed(0)}%"
+                                    );
+                                  }).toList(),
                           ),
                           const Padding(
                             padding: EdgeInsets.only(top: 8.0),
-                            child: Text("*Semakin tinggi skor, semakin direkomendasikan.", 
+                            child: Text("*Semakin tinggi Skor Akhir, semakin direkomendasikan.",
                               style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic)),
                           )
                         ],

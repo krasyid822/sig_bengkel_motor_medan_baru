@@ -48,6 +48,16 @@ class LokasiRepository {
     }
   }
 
+  Future<List<Map<String, dynamic>>> fetchAturan() async {
+    try {
+      final response = await _supabase.from('aturan_sig').select();
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint("Error fetching aturan_sig: $e");
+      rethrow; // Biarkan UI menangani error lewat catch
+    }
+  }
+
   Future<void> deleteLokasi(dynamic id) async {
     try {
       // DIAGNOSTIK: Cek apakah data ada sebelum dihapus

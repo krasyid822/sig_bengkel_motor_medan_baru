@@ -26,25 +26,12 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
   List<Marker> _markers = [];
   List<CircleMarker> _circles = [];
   List<Map<String, dynamic>> _rankingData = [];
+  List<Map<String, dynamic>> _rules = []; // Aturan lengkap dari DB
+  Map<String, int> _bufferRules = {}; // Shortcut radius
+  List<LatLng> _medanBaruBoundary = []; // Batas wilayah dari DB
   bool _isLoading = true;
   bool _showBuffers = true;
   bool _showBoundary = true;
-
-  // Koordinat Batas Wilayah Kecamatan Medan Baru yang lebih presisi
-  final List<LatLng> _medanBaruBoundary = [
-    const LatLng(3.5924, 98.6515), // Utara-Barat (Darussalam/Gajah Mada)
-    const LatLng(3.5938, 98.6648), // Utara (Gajah Mada ke arah sungai)
-    const LatLng(3.5960, 98.6690), // Timur Laut (Dekat sungai Babura)
-    const LatLng(3.5900, 98.6675), // Mengikuti sungai Babura
-    const LatLng(3.5820, 98.6635), // Samping USU timur
-    const LatLng(3.5750, 98.6655), // Liku sungai
-    const LatLng(3.5685, 98.6650), // Liku sungai dekat Jamin Ginting
-    const LatLng(3.5645, 98.6625), // Tenggara (Sungai bertemu Jamin Ginting)
-    const LatLng(3.5650, 98.6525), // Selatan (Jamin Ginting dekat Darussalam)
-    const LatLng(3.5730, 98.6520), // Barat (Jl. Darussalam selatan)
-    const LatLng(3.5820, 98.6518), // Barat (Jl. Darussalam tengah)
-    const LatLng(3.5924, 98.6515), // Kembali ke awal
-  ];
 
   @override
   void initState() {
@@ -81,6 +68,34 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
   Future<void> _fetchLocations() async {
     setState(() => _isLoading = true);
     try {
+      // 1. Ambil Aturan dari Supabase
+      final aturanRaw = await _repository.fetchAturan();
+      _rules = aturanRaw;
+      _bufferRules = {
+        for (var a in aturanRaw) a['kode_kriteria'].toString(): (a['radius_buffer'] as num).toInt()
+      };
+
+      // Ekstrak Boundary dari DB jika ada
+      final boundaryRule = aturanRaw.firstWhere(
+        (a) => a['kode_kriteria'] == 'BOUNDARY', 
+        orElse: () => {}
+      );
+      
+      List<LatLng> loadedBoundary = [];
+      if (boundaryRule.isNotEmpty && boundaryRule['nama_kriteria'] != null) {
+        try {
+          final List<dynamic> coords = jsonDecode(boundaryRule['nama_kriteria']);
+          loadedBoundary = coords.map((c) => LatLng(c[0].toDouble(), c[1].toDouble())).toList();
+          // Tutup polygon jika belum tertutup
+          if (loadedBoundary.isNotEmpty && loadedBoundary.first != loadedBoundary.last) {
+            loadedBoundary.add(loadedBoundary.first);
+          }
+        } catch (e) {
+          debugPrint("Gagal parse boundary: $e");
+        }
+      }
+
+      // 2. Ambil Data Lokasi & Ranking
       final data = await _repository.fetchRekomendasiLokasi();
       final ranking = await _repository.fetchSawRanking();
       
@@ -90,7 +105,12 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
         _rankingData = ranking;
         _markers = [];
         _circles = [];
+        _medanBaruBoundary = loadedBoundary;
         
+        // Aturan Buffer Dinamis (Fallback ke default jika DB kosong)
+        final double radiusAkses = (_bufferRules['C2'] ?? 200).toDouble();
+        final double radiusPesaing = (_bufferRules['C3'] ?? 500).toDouble();
+
         // Map skor untuk pencarian cepat
         final Map<String, double> scoreMap = {
           for (var r in ranking) r['id'].toString(): (r['skor_akhir'] ?? 0.0).toDouble(),
@@ -120,24 +140,20 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
           double bufferRadius = 0;
 
           if (kategori == 'kandidat') {
-            // Ini adalah KANDIDAT BENGKEL
             themeColor = Colors.amber;
             iconData = Icons.stars;
             item['is_candidate'] = true;
-            // Jika ada skor di view SAW, tempelkan
             if (scoreMap.containsKey(id)) {
                item['skor_akhir'] = scoreMap[id];
             }
           } else if (kategori == 'bengkel') {
-            // Ini Pesaing (Bengkel eksisting) - Kriteria C3
             themeColor = Colors.red;
             iconData = Icons.settings_applications;
-            bufferRadius = 500;
-          } else if (nama.contains('jalan') || kategori == 'fasum') {
-            // Sarana Jalan / Fasum - Kriteria C2
+            bufferRadius = radiusPesaing;
+          } else if (kategori == 'fasum' || nama.contains('jalan')) {
             themeColor = Colors.orange;
             iconData = Icons.add_road;
-            bufferRadius = 200;
+            bufferRadius = radiusAkses;
           }
 
           // Marker
@@ -226,7 +242,7 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    const LatLng centerMedanBaru = LatLng(3.5952, 98.6638);
+    const LatLng centerMedanBaru = LatLng(3.5659, 98.6605);
     
     return Scaffold(
       appBar: AppBar(
@@ -300,8 +316,24 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
                       const Text("Legenda Analisis GIS", style: TextStyle(fontWeight: FontWeight.bold)),
                       const Divider(),
                       _buildLegendItem(Icons.stars, Colors.amber, "Kandidat Bengkel Baru"),
-                      _buildLegendItem(Icons.settings_applications, Colors.red, "Pesaing (C3: Radius 500m)"),
-                      _buildLegendItem(Icons.add_road, Colors.orange, "Akses & Fasum (C2: Radius 200m)"),
+                      ..._rules.where((r) => r['kode_kriteria'] != 'BOUNDARY').map((rule) {
+                        final String kode = rule['kode_kriteria'] ?? '';
+                        final int radius = rule['radius_buffer'] ?? 0;
+                        final String nama = rule['nama_kriteria'] ?? '';
+                        
+                        Color color = Colors.blue;
+                        IconData icon = Icons.location_on;
+                        
+                        if (kode == 'C3') {
+                          color = Colors.red;
+                          icon = Icons.settings_applications;
+                        } else if (kode == 'C2') {
+                          color = Colors.orange;
+                          icon = Icons.add_road;
+                        }
+                        
+                        return _buildLegendItem(icon, color, "$nama ($kode: Radius ${radius}m)");
+                      }),
                       if (_showBoundary)
                         _buildLegendItem(Icons.polyline, Colors.blue, "Batas Wilayah"),
                     ],
