@@ -25,6 +25,7 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
   final LokasiRepository _repository = LokasiRepository();
   List<Marker> _markers = [];
   List<CircleMarker> _circles = [];
+  List<Polyline> _roadLines = []; // Data Vector Line (Jalan)
   List<Map<String, dynamic>> _rankingData = [];
   List<Map<String, dynamic>> _rules = []; // Aturan lengkap dari DB
   Map<String, int> _bufferRules = {}; // Shortcut radius
@@ -95,7 +96,28 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
         }
       }
 
-      // 2. Ambil Data Lokasi & Ranking
+      // 2. Ambil Data Vektor (Polygon & Line)
+      final vektorData = await _repository.fetchGeometriVektor();
+      List<Polyline> loadedRoads = [];
+      
+      for (var v in vektorData) {
+        if (v['tipe'] == 'line' && v['data'] != null) {
+          final features = v['data']['features'] as List?;
+          features?.forEach((f) {
+            final geometry = f['geometry'];
+            if (geometry['type'] == 'LineString') {
+              final coords = geometry['coordinates'] as List;
+              loadedRoads.add(Polyline(
+                points: coords.map((c) => LatLng(c[1].toDouble(), c[0].toDouble())).toList(),
+                color: Colors.orange.withValues(alpha: 0.7),
+                strokeWidth: 4,
+              ));
+            }
+          });
+        }
+      }
+
+      // 3. Ambil Data Lokasi & Ranking
       final data = await _repository.fetchRekomendasiLokasi();
       final ranking = await _repository.fetchSawRanking();
       
@@ -105,6 +127,7 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
         _rankingData = ranking;
         _markers = [];
         _circles = [];
+        _roadLines = loadedRoads;
         _medanBaruBoundary = loadedBoundary;
         
         // Aturan Buffer Dinamis (Fallback ke default jika DB kosong)
@@ -294,6 +317,7 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
                         ),
                       ],
                     ),
+                  if (_showBoundary) PolylineLayer(polylines: _roadLines),
                   if (_showBuffers) CircleLayer(circles: _circles),
                   MarkerLayer(markers: _markers),
                 ],

@@ -17,18 +17,6 @@ class DocumentationPage extends StatelessWidget {
           ),
           _buildSection(
             context,
-            'Format Database (Supabase)',
-            'Tabel: lokasi\n'
-            '- id: uuid (Primary Key)\n'
-            '- nama: text\n'
-            '- kategori: text (bengkel/fasum)\n'
-            '- jalan: text\n'
-            '- geom: geometry(Point, 4326)\n'
-            '- foto_url: text (URL Bukti Foto)\n'
-            '- created_at: timestamptz',
-          ),
-          _buildSection(
-            context,
             'Fitur Unggulan',
             '1. Ambil foto lokasi sebagai bukti fisik.\n'
             '2. Deteksi lokasi via GPS otomatis dengan akurasi tinggi.\n'
@@ -39,16 +27,34 @@ class DocumentationPage extends StatelessWidget {
           ),
           _buildSection(
             context,
+            'Format Database & Full Vector Support',
+            'Sistem mendukung tipe data spasial lengkap (Point, LineString, Polygon):\n'
+            '1. Tabel lokasi: Menyimpan data Point (Bengkel & Kandidat).\n'
+            '2. Tabel jalan_utama: Menyimpan data LineString (Jaringan Jalan).\n'
+            '3. Tabel wilayah_kecamatan: Menyimpan data Polygon (Batas Administrasi).\n'
+            '4. Tabel aturan_sig: Konfigurasi bobot SAW & radius Buffer dinamis.',
+          ),
+          _buildSection(
+            context,
             'Metode Buffer & SAW (GIS Terpadu)',
             'Sistem ini menggunakan penggabungan dua metode analisis SIG untuk menentukan lokasi bengkel terbaik:\n\n'
             '1. METODE BUFFER (Jangkauan)\n'
-            '• Area Aksesibilitas (C2): Radius 200m dari titik jalan/fasum pendukung.\n'
-            '• Area Kompetisi (C3): Radius 500m dari bengkel pesaing.\n\n'
+            '• Area Aksesibilitas (C2): Radius dinamis dari LineString jalan utama.\n'
+            '• Area Kompetisi (C3): Radius dinamis dari Point bengkel pesaing.\n\n'
             '2. METODE SAW (Perankingan)\n'
-            'Melakukan perhitungan skor otomatis dari data GIS dengan bobot seimbang (50% - 50%):\n'
-            '• C2 - Aksesibilitas (Cost): Makin dekat ke akses, skor makin tinggi.\n'
-            '• C3 - Jarak Pesaing (Benefit): Makin jauh dari pesaing, skor makin tinggi.\n\n'
-            'PENTING: Bobot aslinya adalah 20% per kriteria (untuk 5 kriteria). Namun, karena C1, C4, dan C5 belum aktif, bobot didistribusikan ulang (Normalisasi) ke kriteria yang aktif (C2 & C3) masing-masing menjadi 50% agar total skor tetap 100% dan hasil perankingan tetap akurat secara matematis.',
+            'Melakukan perhitungan skor otomatis dari data GIS dengan bobot dinamis sesuai database:\n'
+            '• C2 - Aksesibilitas (Cost): Jarak ke garis jalan (makin dekat makin baik).\n'
+            '• C3 - Jarak Pesaing (Benefit): Jarak antar titik bengkel (makin jauh makin baik).\n\n'
+            'PENTING: Bobot dan radius diambil secara realtime dari tabel aturan_sig. Jika aturan di database diubah, hasil ranking dan visualisasi peta akan otomatis menyesuaikan (Dynamic GIS).',
+          ),
+          _buildSection(
+            context,
+            'Kemampuan Analisis Spasial (SDSS)',
+            'Aplikasi ini berfungsi sebagai Spatial Decision Support System (SDSS) dengan kemampuan:\n\n'
+            '1. Proximity Analysis: Perhitungan jarak presisi menggunakan engine PostGIS (ST_Distance) antara Point-to-Line dan Point-to-Point.\n'
+            '2. Spatial Multi-Criteria Decision Making: Integrasi hasil analisis spasial ke dalam algoritma SAW untuk pengambilan keputusan lokasi.\n'
+            '3. Spatial Overlay: Visualisasi tumpang susun layer Polygon, Line, dan Point untuk analisis visual area strategis.\n'
+            '4. Automated GIS: Pemrosesan data spasial otomatis melalui SQL Views setiap kali ada pembaruan data lokasi.',
           ),
           _buildSection(
             context,

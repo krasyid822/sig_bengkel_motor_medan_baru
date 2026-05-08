@@ -15,6 +15,17 @@ class LokasiRepository {
     }
   }
 
+  Future<void> insertJalan(String nama, String wktLineString) async {
+    try {
+      await _supabase.from('jalan_utama').insert({
+        'nama': nama,
+        'geom': wktLineString,
+      });
+    } catch (e) {
+      throw Exception('Gagal menyimpan data jalan: $e');
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchRekomendasiLokasi() async {
     try {
       // Memanggil VIEW v_lokasi_peta yang sudah mengonversi geometry
@@ -48,13 +59,39 @@ class LokasiRepository {
     }
   }
 
+  Future<List<Map<String, dynamic>>> fetchAllJalan() async {
+    try {
+      final response = await _supabase.from('jalan_utama').select();
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      throw Exception('Gagal mengambil data jalan: $e');
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchAturan() async {
     try {
       final response = await _supabase.from('aturan_sig').select();
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       debugPrint("Error fetching aturan_sig: $e");
-      rethrow; // Biarkan UI menangani error lewat catch
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchGeometriVektor() async {
+    try {
+      // Mengambil data Polygon Wilayah
+      final wilayah = await _supabase.rpc('get_wilayah_geojson');
+      // Mengambil data LineString Jalan
+      final jalan = await _supabase.rpc('get_jalan_geojson');
+      
+      return [
+        {'tipe': 'polygon', 'data': wilayah},
+        {'tipe': 'line', 'data': jalan},
+      ];
+    } catch (e) {
+      debugPrint("Info: RPC Geometri belum siap, menggunakan fallback. $e");
+      return [];
     }
   }
 

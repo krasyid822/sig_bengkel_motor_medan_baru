@@ -87,6 +87,7 @@ nama,kategori,jalan,longitude,latitude,timestamp_utc
 * Visualisasi peta dengan layer buffer area dan marker kompetitor/fasum.
 
 ### 5. Catatan Pengembangan & Fitur Masa Depan
+*   **Implementasi Full Vector (Line & Polygon):** Mengembangkan struktur data dari Point-based menjadi Full Vector. Menggunakan `LineString` untuk data jalan (C2) agar perhitungan jarak lebih presisi, dan `Polygon` untuk batas wilayah (Boundary) serta area permukiman untuk mendukung validasi spasial `ST_Contains`.
 *   **Otomasi Buffer & SAW (Backend Sync):** Sistem telah diperbarui untuk membaca kriteria langsung dari tabel `aturan_sig`. Pastikan View di database menggunakan subquery ke tabel ini agar sinkronisasi 100% otomatis.
 *   **Keamanan Hitungan Database:** Query View `v_rekomendasi_bengkel_saw` secara spesifik memanggil `WHERE kode_kriteria = 'C2'` dan `'C3'`. Jadi, meskipun ada banyak baris baru di tabel `aturan_sig` (seperti data `BOUNDARY`), hitungan SAW di database tidak akan berubah kecuali Anda mengubah Query SQL-nya.
 *   **Optimasi Kategori Spasial:** Memisahkan input "Akses Jalan" (Line/Point Road) dengan "Fasilitas Umum" (Point Interest) agar analisis C2 lebih spesifik pada aksesibilitas transportasi.
