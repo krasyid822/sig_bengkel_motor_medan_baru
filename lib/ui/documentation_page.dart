@@ -27,12 +27,22 @@ class DocumentationPage extends StatelessWidget {
           ),
           _buildSection(
             context,
-            'Format Database & Full Vector Support',
-            'Sistem mendukung tipe data spasial lengkap (Point, LineString, Polygon):\n'
-            '1. Tabel lokasi: Menyimpan data Point (Bengkel & Kandidat).\n'
-            '2. Tabel jalan_utama: Menyimpan data LineString (Jaringan Jalan).\n'
-            '3. Tabel wilayah_kecamatan: Menyimpan data Polygon (Batas Administrasi).\n'
-            '4. Tabel aturan_sig: Konfigurasi bobot SAW & radius Buffer dinamis.',
+            'Konektivitas Flutter & Supabase',
+            'Aplikasi terhubung ke Supabase melalui Supabase SDK dengan integrasi PostGIS:\n\n'
+            '1. VEKTOR POINT (Tabel lokasi): Input via GPS/Manual disimpan sebagai geometry(Point, 4326). Digunakan untuk Bengkel, Fasum, dan Kandidat.\n'
+            '2. VEKTOR LINE (Tabel jalan_utama): Input via GPS Auto-Tracking atau Manual Vertex disimpan sebagai geometry(LineString, 4326).\n'
+            '3. VEKTOR POLYGON (Tabel wilayah_kecamatan): Batas wilayah disimpan sebagai geometry(Polygon, 4326) dan diambil via RPC get_wilayah_geojson.\n'
+            '4. BUFFER OTOMATIS: Dihitung di sisi database melalui SQL View v_lokasi_buffer menggunakan referensi radius dinamis dari tabel aturan_sig.\n'
+            '5. SAW PERANGKINGAN: Proses normalisasi dan pembobotan dilakukan otomatis di database melalui SQL View v_rekomendasi_bengkel_saw yang menghitung jarak spasial antar objek secara realtime.',
+          ),
+          _buildSection(
+            context,
+            'Format Dataset CSV (GIS Full Vector)',
+            'Gunakan format kolom berikut untuk impor data massal:\n\n'
+            '• Untuk POINT: nama, kategori, jalan, longitude, latitude, foto_url\n'
+            '• Untuk LINE: nama, kategori, geom (Isi dengan format WKT: LINESTRING(lng lat, lng lat, ...))\n\n'
+            'Contoh baris JALAN:\n'
+            'Jl. Jamin Ginting, jalan, "LINESTRING(98.66 3.56, 98.67 3.57)"',
           ),
           _buildSection(
             context,
@@ -58,11 +68,12 @@ class DocumentationPage extends StatelessWidget {
           ),
           _buildSection(
             context,
-            'Format Dataset CSV',
-            'Jika ingin mengimpor data lewat file, gunakan format berikut:\n'
-            'nama,kategori,jalan,longitude,latitude,foto_url,timestamp_utc\n\n'
-            'Contoh:\n'
-            'Bengkel Sejahtera,bengkel,Jl. Dr. Mansyur,98.66,3.56,https://link-foto.com/a.jpg,2024-05-20T10:00:00Z',
+            'Format Dataset CSV (GIS Full Vector)',
+            'Gunakan format kolom berikut untuk impor data massal:\n\n'
+            '• Untuk POINT: nama, kategori, jalan, longitude, latitude, foto_url\n'
+            '• Untuk LINE: nama, kategori, geom (Isi dengan format WKT: LINESTRING(lng lat, lng lat, ...))\n\n'
+            'Contoh baris JALAN:\n'
+            'Jl. Jamin Ginting, jalan, "LINESTRING(98.66 3.56, 98.67 3.57)"',
           ),
           _buildSection(
             context,
