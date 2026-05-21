@@ -17,12 +17,47 @@ class LokasiRepository {
 
   Future<void> insertJalan(String nama, String wktLineString) async {
     try {
-      await _supabase.from('jalan_utama').insert({
+      await _supabase.from('namajalan_utama').insert({
         'nama': nama,
         'geom': wktLineString,
       });
     } catch (e) {
       throw Exception('Gagal menyimpan data jalan: $e');
+    }
+  }
+
+  Future<void> updateLokasi(dynamic id, Map<String, dynamic> data) async {
+    try {
+      await _supabase.from('lokasi').update(data).eq('id', id);
+    } on PostgrestException catch (e) {
+      throw Exception('Error Update Database: ${e.message} (Detail: ${e.details})');
+    } catch (e) {
+      throw Exception('Gagal memperbarui data lokasi: $e');
+    }
+  }
+
+  Future<void> replaceJalanBatch(List<Map<String, dynamic>> data) async {
+    try {
+      await _supabase.from('namajalan_utama').delete().neq('nama', '');
+      if (data.isNotEmpty) {
+        await _supabase.from('namajalan_utama').insert(data);
+      }
+    } catch (e) {
+      throw Exception('Gagal mengganti data jalan dari GeoJSON: $e');
+    }
+  }
+
+  Future<void> upsertBoundaryRule(String boundaryJson) async {
+    try {
+      await _supabase.from('aturan_sig').upsert({
+        'kode_kriteria': 'BOUNDARY',
+        'nama_kriteria': boundaryJson,
+        'bobot': 0,
+        'radius_buffer': 0,
+        'tipe_kriteria': 'wilayah',
+      }, onConflict: 'kode_kriteria');
+    } catch (e) {
+      throw Exception('Gagal menyimpan boundary wilayah: $e');
     }
   }
 
@@ -52,7 +87,8 @@ class LokasiRepository {
 
   Future<List<Map<String, dynamic>>> fetchAllLokasi() async {
     try {
-      final response = await _supabase.from('lokasi').select();
+      // Mengambil dari VIEW agar koordinat latitude/longitude sudah terurai
+      final response = await _supabase.from('v_lokasi_peta').select();
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       throw Exception('Gagal mengambil semua data lokasi: $e');
@@ -61,7 +97,7 @@ class LokasiRepository {
 
   Future<List<Map<String, dynamic>>> fetchAllJalan() async {
     try {
-      final response = await _supabase.from('jalan_utama').select();
+      final response = await _supabase.from('namajalan_utama').select();
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       throw Exception('Gagal mengambil data jalan: $e');
@@ -80,8 +116,8 @@ class LokasiRepository {
 
   Future<List<Map<String, dynamic>>> fetchGeometriVektor() async {
     try {
-      // Mengambil data Polygon Wilayah
-      final wilayah = await _supabase.rpc('get_wilayah_geojson');
+      // Mengambil data Polygon Wilayah LANGSUNG dari VIEW v_wilayah_geojson
+      final wilayah = await _supabase.from('v_wilayah_geojson').select('geometry');
       // Mengambil data LineString Jalan
       final jalan = await _supabase.rpc('get_jalan_geojson');
       
@@ -90,7 +126,7 @@ class LokasiRepository {
         {'tipe': 'line', 'data': jalan},
       ];
     } catch (e) {
-      debugPrint("Info: RPC Geometri belum siap, menggunakan fallback. $e");
+      debugPrint("Info: Gagal mengambil data vektor. $e");
       return [];
     }
   }

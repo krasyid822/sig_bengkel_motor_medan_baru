@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sig_bengkel_motor_medan_baru/logika/csv_logic.dart';
+import 'package:sig_bengkel_motor_medan_baru/ui/widgets/loading_overlay_card.dart';
+import 'package:sig_bengkel_motor_medan_baru/ui/widgets/overflow_marquee_text.dart';
+import 'package:sig_bengkel_motor_medan_baru/ui/widgets/supabase_status_dot.dart';
 
 class CsvImportPage extends StatefulWidget {
   const CsvImportPage({super.key});
@@ -16,6 +19,21 @@ class _CsvImportPageState extends State<CsvImportPage> {
   final CsvLogic _csvLogic = CsvLogic();
   late StreamSubscription _intentDataStreamSubscription;
   bool _isLoading = false;
+  double _loadingProgress = 0.0;
+  String _loadingMessage = 'Mohon tunggu...';
+
+  void _setLoadingState({
+    required bool isLoading,
+    double? progress,
+    String? message,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = isLoading;
+      if (progress != null) _loadingProgress = progress.clamp(0.0, 1.0).toDouble();
+      if (message != null) _loadingMessage = message;
+    });
+  }
 
   @override
   void initState() {
@@ -59,21 +77,34 @@ class _CsvImportPageState extends State<CsvImportPage> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    _setLoadingState(
+      isLoading: true,
+      progress: 0.05,
+      message: 'Menerima file CSV dari aplikasi lain...',
+    );
     
     try {
       // receive_sharing_intent biasanya memberikan path file lokal yang sudah bisa dibaca langsung
       // atau setidaknya bisa dibaca oleh File() jika itu path file://
       File file = File(path);
 
-      final message = await _csvLogic.uploadCsvFromFile(file);
+      final message = await _csvLogic.uploadCsvFromFile(
+        file,
+        onProgress: (progress, message) {
+          _setLoadingState(isLoading: true, progress: progress, message: message);
+        },
+      );
       if (mounted) {
-        setState(() => _isLoading = false);
+        _setLoadingState(
+          isLoading: false,
+          progress: 1.0,
+          message: 'Impor CSV selesai.',
+        );
         if (message != null) _showSnackBar(message);
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        _setLoadingState(isLoading: false);
         _showSnackBar("Gagal memproses file share: ${e.toString()}");
       }
     }
@@ -92,19 +123,43 @@ class _CsvImportPageState extends State<CsvImportPage> {
   }
 
   Future<void> _handleImport() async {
-    setState(() => _isLoading = true);
-    final message = await _csvLogic.pickAndUploadCsv();
+    _setLoadingState(
+      isLoading: true,
+      progress: 0.0,
+      message: 'Menyiapkan impor CSV...',
+    );
+    final message = await _csvLogic.pickAndUploadCsv(
+      onProgress: (progress, message) {
+        _setLoadingState(isLoading: true, progress: progress, message: message);
+      },
+    );
     if (mounted) {
-      setState(() => _isLoading = false);
+      _setLoadingState(
+        isLoading: false,
+        progress: 1.0,
+        message: 'Impor CSV selesai.',
+      );
       if (message != null) _showSnackBar(message);
     }
   }
 
   Future<void> _handleExport() async {
-    setState(() => _isLoading = true);
-    final file = await _csvLogic.exportToCsv();
+    _setLoadingState(
+      isLoading: true,
+      progress: 0.0,
+      message: 'Menyiapkan ekspor CSV...',
+    );
+    final file = await _csvLogic.exportToCsv(
+      onProgress: (progress, message) {
+        _setLoadingState(isLoading: true, progress: progress, message: message);
+      },
+    );
     if (mounted) {
-      setState(() => _isLoading = false);
+      _setLoadingState(
+        isLoading: false,
+        progress: 1.0,
+        message: 'Ekspor CSV selesai.',
+      );
       if (file != null) {
         await SharePlus.instance.share(
           ShareParams(
@@ -122,30 +177,29 @@ class _CsvImportPageState extends State<CsvImportPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manajemen Data CSV'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: const OverflowMarqueeText('Manajemen Data CSV'),
+        actions: const [
+          SupabaseStatusDot(),
+        ],
       ),
-      body: Center(
-        child: _isLoading
-            ? const Column(
+      body: Stack(
+        children: [
+          Center(
+            child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Mohon tunggu...'),
-                ],
-              )
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.file_copy_rounded, size: 80, color: Colors.deepPurple),
+                  const Icon(Icons.file_copy_rounded, size: 80, color: Color(0xFFF97316)),
                   const SizedBox(height: 20),
                   const Text(
-                    'Pilih file CSV dengan format:',
+                    'Pilih file CSV untuk data point:',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  const Text('nama,kategori,jalan,longitude,latitude,foto_url,timestamp_utc'),
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'nama,kategori,jalan,longitude,latitude,foto_url,waktu_buka,waktu_tutup,hari_libur,is_resmi',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 15),
                   ElevatedButton.icon(
                     onPressed: _handleImport,
                     icon: const Icon(Icons.upload_file),
@@ -162,14 +216,23 @@ class _CsvImportPageState extends State<CsvImportPage> {
                     label: const Text('Ekspor & Bagikan CSV'),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                      backgroundColor: Colors.green.shade700,
+                      backgroundColor: const Color(0xFF10B981),
                       foregroundColor: Colors.white,
                       minimumSize: const Size(280, 50),
                     ),
                   ),
                 ],
               ),
+          ),
+          if (_isLoading)
+            LoadingOverlayCard(
+              progress: _loadingProgress,
+              message: _loadingMessage,
+              color: Color(0xFFF97316),
+            ),
+        ],
       ),
     );
   }
 }
+

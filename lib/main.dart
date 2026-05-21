@@ -4,9 +4,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:sig_bengkel_motor_medan_baru/services/supabase_connection_service.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/csv_import_page.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/data_collection_page.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/documentation_page.dart';
+import 'package:sig_bengkel_motor_medan_baru/ui/geojson_import_page.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/map_dashboard_page.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/saw_process_page.dart';
 
@@ -20,6 +22,8 @@ Future<void> main() async {
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
+  SupabaseConnectionService.instance.startMonitoring();
+
   runApp(const MyApp());
 }
 
@@ -32,7 +36,23 @@ class MyApp extends StatelessWidget {
       title: 'GIS Bengkel Buffer+SAW',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFFF97316),
+          primary: const Color(0xFFF97316),
+          surface: Colors.white,
+        ),
+        scaffoldBackgroundColor: const Color(0xFFE2E8F0), // Slate 200 - Definitely not white
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFFF97316),
+          foregroundColor: Colors.white,
+          elevation: 4,
+          centerTitle: true,
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
         useMaterial3: true,
       ),
       home: const MainPage(),
@@ -84,6 +104,11 @@ class _MainPageState extends State<MainPage> {
         setState(() {
           _currentIndex = 3; // Pindah ke tab CSV
         });
+      } else if (sharedFile.path.toLowerCase().endsWith('.geojson') ||
+          sharedFile.path.toLowerCase().endsWith('.json')) {
+        setState(() {
+          _currentIndex = 4; // Pindah ke tab GeoJSON
+        });
       }
     }
   }
@@ -116,6 +141,7 @@ class _MainPageState extends State<MainPage> {
     SawProcessPage(onLocationTap: _onJumpToLocation),
     const DataCollectionPage(),
     const CsvImportPage(),
+    const GeoJsonImportPage(),
     const DocumentationPage(),
   ];
 
@@ -124,6 +150,7 @@ class _MainPageState extends State<MainPage> {
     return Scaffold(
       body: _pages()[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
+        backgroundColor: Colors.white,
         currentIndex: _currentIndex,
         onTap: (index) {
           setState(() {
@@ -131,26 +158,38 @@ class _MainPageState extends State<MainPage> {
           });
         },
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: Colors.deepPurple,
+        selectedItemColor: const Color(0xFFF97316),
+        unselectedItemColor: Colors.blueGrey,
+        showUnselectedLabels: true,
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.map),
+            icon: Icon(Icons.map_outlined),
+            activeIcon: Icon(Icons.map),
             label: 'Peta',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.analytics),
-            label: 'SAW',
+            icon: Icon(Icons.format_list_numbered_outlined),
+            activeIcon: Icon(Icons.format_list_numbered),
+            label: 'Ranking',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.add_location_alt),
+            icon: Icon(Icons.add_location_alt_outlined),
+            activeIcon: Icon(Icons.add_location_alt),
             label: 'Input',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.upload_file),
+            icon: Icon(Icons.upload_file_outlined),
+            activeIcon: Icon(Icons.upload_file),
             label: 'CSV',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.menu_book),
+            icon: Icon(Icons.polyline_outlined),
+            activeIcon: Icon(Icons.polyline),
+            label: 'GeoJSON',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.menu_book_outlined),
+            activeIcon: Icon(Icons.menu_book),
             label: 'Info',
           ),
         ],

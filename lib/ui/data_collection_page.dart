@@ -1,12 +1,15 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:sig_bengkel_motor_medan_baru/data/lokasi_repository.dart';
 import 'package:sig_bengkel_motor_medan_baru/logika/location_service.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/camera_screen.dart';
+import 'package:sig_bengkel_motor_medan_baru/ui/map_picker_page.dart';
+import 'package:sig_bengkel_motor_medan_baru/ui/widgets/loading_overlay_card.dart';
+import 'package:sig_bengkel_motor_medan_baru/ui/widgets/overflow_marquee_text.dart';
+import 'package:sig_bengkel_motor_medan_baru/ui/widgets/supabase_status_dot.dart';
 
 class DataCollectionPage extends StatefulWidget {
   const DataCollectionPage({super.key});
@@ -21,21 +24,38 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
   final _jalanController = TextEditingController();
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
-  final _verticesController = TextEditingController(); 
+  final _bukaController = TextEditingController();
+  final _tutupController = TextEditingController();
+  final _hariLiburController = TextEditingController();
+  final _luasLahanController = TextEditingController();
   
   String _kategori = 'bengkel';
+  bool _isResmi = false;
+  List<String> _selectedHariLibur = [];
   File? _imageFile;
+  String? _existingFotoUrl;
+  dynamic _editingLokasiId;
+  bool get _isEditing => _editingLokasiId != null;
   bool _isLoading = false;
   String _loadingMsg = 'Mohon tunggu...';
-
-  // Tracking State
-  bool _isTracking = false;
-  StreamSubscription<Position>? _positionStream;
-  Position? _lastRecordedPosition;
+  double _loadingProgress = 0.0;
   
   final LokasiRepository _repository = LokasiRepository();
   final LocationService _locationService = LocationService();
   final ImagePicker _picker = ImagePicker();
+
+  void _updateLoading({
+    required String message,
+    required double progress,
+    bool isLoading = true,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = isLoading;
+      _loadingMsg = message;
+      _loadingProgress = progress.clamp(0.0, 1.0).toDouble();
+    });
+  }
 
   @override
   void initState() {
@@ -45,82 +65,22 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
 
   @override
   void dispose() {
-    _stopTracking(); // Pastikan stream ditutup saat keluar halaman
     _namaController.dispose();
     _jalanController.dispose();
     _latController.dispose();
     _lngController.dispose();
-    _verticesController.dispose();
+    _bukaController.dispose();
+    _tutupController.dispose();
+    _hariLiburController.dispose();
+    _luasLahanController.dispose();
     super.dispose();
   }
 
-  void _toggleTracking() {
-    if (_isTracking) {
-      _stopTracking();
-    } else {
-      _startTracking();
-    }
-  }
-
-  Future<void> _startTracking() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("GPS tidak aktif.")));
-      }
-      return;
-    }
-
-    setState(() {
-      _isTracking = true;
-      _verticesController.clear(); // Mulai dari awal saat tracking baru
-    });
-
-    const LocationSettings locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 5, // Tambah titik setiap berpindah 5 meter
-    );
-
-    _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings).listen(
-      (Position position) {
-        _addPositionToVertices(position);
-      },
-    );
-  }
-
-  void _stopTracking() {
-    _positionStream?.cancel();
-    setState(() {
-      _isTracking = false;
-      _positionStream = null;
-    });
-  }
-
-  void _addPositionToVertices(Position pos) {
-    final point = "${pos.longitude} ${pos.latitude}";
-    setState(() {
-      if (_verticesController.text.isEmpty) {
-        _verticesController.text = point;
-      } else {
-        // Hindari duplikasi jika posisi sama persis dengan yang terakhir
-        if (_lastRecordedPosition?.latitude != pos.latitude || _lastRecordedPosition?.longitude != pos.longitude) {
-           _verticesController.text += ", $point";
-        }
-      }
-      _lastRecordedPosition = pos;
-      // Update juga field lat/lng utama untuk feedback visual
-      _latController.text = pos.latitude.toString();
-      _lngController.text = pos.longitude.toString();
-    });
-  }
-
   Future<void> _determinePosition() async {
-    setState(() {
-      _isLoading = true;
-      _loadingMsg = 'Sedang mencari lokasi GPS...';
-    });
+    _updateLoading(message: 'Memeriksa layanan dan izin GPS...', progress: 0.0);
     try {
       final position = await _locationService.getCurrentPosition();
+      _updateLoading(message: 'Koordinat GPS ditemukan, mengambil alamat...', progress: 0.5);
       if (position != null) {
         setState(() {
           _latController.text = position.latitude.toString();
@@ -128,27 +88,18 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
         });
         await _getAddressFromLatLng(position.latitude, position.longitude);
       }
+      _updateLoading(message: 'Lokasi GPS berhasil diperbarui.', progress: 1.0);
     } catch (e) {
       debugPrint("Error determine position: $e");
       if (mounted) {
          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  // Fungsi untuk menambah koordinat saat ini ke daftar vertices (LineString)
-  void _addCurrentToVertices() {
-    if (_latController.text.isNotEmpty && _lngController.text.isNotEmpty) {
-      final point = "${_lngController.text} ${_latController.text}";
-      setState(() {
-        if (_verticesController.text.isEmpty) {
-          _verticesController.text = point;
-        } else {
-          _verticesController.text += ", $point";
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -165,6 +116,28 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
     }
   }
 
+  Future<void> _pickFromMap() async {
+    final double initialLat = double.tryParse(_latController.text) ?? 3.5659;
+    final double initialLng = double.tryParse(_lngController.text) ?? 98.6605;
+
+    final LatLng? picked = await Navigator.push<LatLng>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MapPickerPage(
+          initialLocation: LatLng(initialLat, initialLng),
+        ),
+      ),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _latController.text = picked.latitude.toString();
+        _lngController.text = picked.longitude.toString();
+      });
+      await _getAddressFromLatLng(picked.latitude, picked.longitude);
+    }
+  }
+
   Future<void> _getLatLngFromAddress() async {
     final address = _jalanController.text.trim();
     if (address.isEmpty) return;
@@ -172,6 +145,7 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
     setState(() {
       _isLoading = true;
       _loadingMsg = 'Mencari koordinat dari alamat...';
+      _loadingProgress = 0.0;
     });
 
     try {
@@ -183,6 +157,7 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
           _lngController.text = loc.longitude.toString();
         });
         if (mounted) {
+          _updateLoading(message: 'Koordinat berhasil ditemukan dari alamat.', progress: 1.0);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Koordinat berhasil diperbarui berdasarkan alamat.'))
           );
@@ -195,7 +170,11 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
         );
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -249,57 +228,236 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
     }
   }
 
+  void _resetForm({bool refreshPosition = true}) {
+    _formKey.currentState?.reset();
+    _namaController.clear();
+    _jalanController.clear();
+    _latController.clear();
+    _lngController.clear();
+    _bukaController.clear();
+    _tutupController.clear();
+    _hariLiburController.clear();
+    _luasLahanController.clear();
+    setState(() {
+      _kategori = 'bengkel';
+      _isResmi = false;
+      _selectedHariLibur = [];
+      _imageFile = null;
+      _existingFotoUrl = null;
+      _editingLokasiId = null;
+    });
+    if (refreshPosition) {
+      _determinePosition();
+    }
+  }
+
+  Future<void> _openEditPicker() async {
+    _updateLoading(message: 'Mengambil data yang bisa diedit...', progress: 0.2);
+    try {
+      final items = await _repository.fetchAllLokasi();
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      final selected = await showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) {
+          final queryController = TextEditingController();
+          List<Map<String, dynamic>> filteredItems = List<Map<String, dynamic>>.from(items);
+
+          return StatefulBuilder(
+            builder: (context, setModalState) {
+              void applyFilter(String query) {
+                final keyword = query.trim().toLowerCase();
+                setModalState(() {
+                  filteredItems = items.where((item) {
+                    final nama = (item['nama'] ?? '').toString().toLowerCase();
+                    final jalan = (item['jalan'] ?? '').toString().toLowerCase();
+                    final kategori = (item['kategori'] ?? '').toString().toLowerCase();
+                    return nama.contains(keyword) ||
+                        jalan.contains(keyword) ||
+                        kategori.contains(keyword);
+                  }).toList();
+                });
+              }
+
+              return SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    top: 16,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const OverflowMarqueeText(
+                        'Pilih Data Yang Akan Diedit',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: queryController,
+                        onChanged: applyFilter,
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.search),
+                          hintText: 'Cari nama, alamat, atau kategori',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Flexible(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: filteredItems.length,
+                          separatorBuilder: (_, _) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final item = filteredItems[index];
+                            final title = (item['nama'] ?? 'Tanpa Nama').toString();
+                            final subtitle =
+                                '${(item['kategori'] ?? '-').toString().toUpperCase()} • ${(item['jalan'] ?? 'Alamat tidak tersedia').toString()}';
+                            return ListTile(
+                              title: OverflowMarqueeText(
+                                title,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              subtitle: OverflowMarqueeText(
+                                subtitle,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              onTap: () => Navigator.pop(context, item),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+
+      if (selected != null) {
+        _populateFormForEdit(selected);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal memuat data edit: $e')),
+      );
+    }
+  }
+
+  void _populateFormForEdit(Map<String, dynamic> item) {
+    // Ambil latitude/longitude langsung jika ada (dari View v_lokasi_peta)
+    String lat = (item['latitude'] ?? '').toString();
+    String lng = (item['longitude'] ?? '').toString();
+
+    // Fallback jika latitude/longitude kosong (parsing manual dari geom)
+    if (lat.isEmpty || lng.isEmpty) {
+      final dynamic geomRaw = item['geom'];
+      if (geomRaw != null) {
+        final geomText = geomRaw.toString();
+        final pointMatch = RegExp(r'POINT\(([-0-9.]+)\s+([-0-9.]+)\)', caseSensitive: false).firstMatch(geomText);
+        if (pointMatch != null) {
+          lng = pointMatch.group(1) ?? '';
+          lat = pointMatch.group(2) ?? '';
+        }
+      }
+    }
+
+    setState(() {
+      _editingLokasiId = item['id'];
+      _namaController.text = (item['nama'] ?? '').toString();
+      _jalanController.text = (item['jalan'] ?? '').toString();
+      _latController.text = lat;
+      _lngController.text = lng;
+      _kategori = ((item['kategori'] ?? 'bengkel').toString().toLowerCase());
+      _bukaController.text = (item['waktu_buka'] ?? '').toString();
+      _tutupController.text = (item['waktu_tutup'] ?? '').toString();
+      _hariLiburController.text = (item['hari_libur'] ?? '').toString();
+      
+      const allDaysOptions = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu', 'Hari Besar Libur'];
+      _selectedHariLibur = (item['hari_libur'] ?? '')
+          .toString()
+          .replaceAll(' dan ', ', ')
+          .split(',')
+          .map((e) => e.trim())
+          .map((e) => allDaysOptions.firstWhere((day) => day.toLowerCase() == e.toLowerCase(), orElse: () => e))
+          .where((e) => e.isNotEmpty)
+          .toList();
+
+      _luasLahanController.text = (item['luas_lahan'] ?? '').toString();
+      _isResmi = item['is_resmi'] == true;
+      _existingFotoUrl = item['foto_url']?.toString();
+      _imageFile = null;
+    });
+  }
+
   Future<void> _submitData() async {
     if (!_formKey.currentState!.validate()) return;
-    
-    setState(() {
-      _isLoading = true;
-      _loadingMsg = 'Sedang menyimpan data...';
-    });
+    final bool needsPhotoUpload = _imageFile != null;
+    final int totalSteps = needsPhotoUpload ? 3 : 2;
+    int completedSteps = 0;
+
+    void advanceProgress(String message) {
+      completedSteps++;
+      _updateLoading(
+        message: message,
+        progress: completedSteps / totalSteps,
+      );
+    }
+
+    _updateLoading(message: 'Memvalidasi data sebelum disimpan...', progress: 0.0);
 
     try {
-      if (_kategori == 'jalan') {
-        // Logika Simpan LineString
-        final wkt = "LINESTRING(${_verticesController.text})";
-        await _repository.insertJalan(_namaController.text, wkt);
+      final double? lat = double.tryParse(_latController.text);
+      final double? lng = double.tryParse(_lngController.text);
+
+      if (lat == null || lng == null) {
+        throw Exception('Format koordinat tidak valid.');
+      }
+
+      if (_kategori != 'kandidat' && _imageFile == null && _existingFotoUrl == null) {
+        throw Exception('Foto bukti wajib diambil untuk kategori ini.');
+      }
+
+      String? fotoUrl = _existingFotoUrl;
+      if (_imageFile != null) {
+        advanceProgress('Mengunggah foto dokumentasi...');
+        fotoUrl = await _repository.uploadFoto(_imageFile!);
+      }
+
+      advanceProgress(_isEditing ? 'Memperbarui data lokasi di database...' : 'Menyimpan data lokasi ke database...');
+      final data = {
+        'nama': _namaController.text,
+        'kategori': _kategori,
+        'jalan': _jalanController.text,
+        'geom': 'POINT($lng $lat)',
+        'foto_url': fotoUrl,
+        'waktu_buka': _bukaController.text.isNotEmpty ? _bukaController.text : null,
+        'waktu_tutup': _tutupController.text.isNotEmpty ? _tutupController.text : null,
+        'hari_libur': _hariLiburController.text.isNotEmpty ? _hariLiburController.text : null,
+        'is_resmi': _isResmi,
+        'luas_lahan': double.tryParse(_luasLahanController.text) ?? 0,
+      };
+      if (_isEditing) {
+        await _repository.updateLokasi(_editingLokasiId, data);
       } else {
-        // Logika Simpan Point
-        final double? lat = double.tryParse(_latController.text);
-        final double? lng = double.tryParse(_lngController.text);
-
-        if (lat == null || lng == null) {
-          throw Exception('Format koordinat tidak valid.');
-        }
-
-        if (_kategori != 'kandidat' && _imageFile == null) {
-          throw Exception('Foto bukti wajib diambil untuk kategori ini.');
-        }
-
-        String? fotoUrl;
-        if (_imageFile != null) {
-          fotoUrl = await _repository.uploadFoto(_imageFile!);
-        }
-
-        final data = {
-          'nama': _namaController.text,
-          'kategori': _kategori,
-          'jalan': _jalanController.text,
-          'geom': 'POINT($lng $lat)',
-          'created_at': DateTime.now().toIso8601String(),
-          'foto_url': fotoUrl,
-        };
+        data['created_at'] = DateTime.now().toIso8601String();
         await _repository.insertBatchLokasi([data]);
       }
 
+      advanceProgress('Penyimpanan data selesai.');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Data berhasil disimpan!')));
-        _namaController.clear();
-        _jalanController.clear();
-        _verticesController.clear();
-        setState(() {
-          _imageFile = null;
-        });
-        _determinePosition();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_isEditing ? 'Data berhasil diperbarui!' : 'Data berhasil disimpan!')),
+        );
+        _resetForm();
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -311,157 +469,357 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Input Data GIS')),
-      body: _isLoading
-          ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const CircularProgressIndicator(), const SizedBox(height: 16), Text(_loadingMsg)]))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextFormField(
-                      controller: _namaController,
-                      decoration: const InputDecoration(labelText: 'Nama Lokasi / Nama Jalan', border: OutlineInputBorder(), prefixIcon: Icon(Icons.location_on)),
-                      validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      initialValue: _kategori,
-                      decoration: const InputDecoration(labelText: 'Kategori Data', border: OutlineInputBorder()),
-                      items: [
-                        {'val': 'kandidat', 'label': 'KANDIDAT LOKASI BARU (POINT)'},
-                        {'val': 'bengkel', 'label': 'BENGKEL PESAING (POINT)'},
-                        {'val': 'fasum', 'label': 'FASILITAS UMUM (POINT)'},
-                        {'val': 'jalan', 'label': 'JALAN UTAMA (VEKTOR LINE)'},
-                      ].map((e) => DropdownMenuItem(value: e['val']!, child: Text(e['label']!))).toList(),
-                      onChanged: (v) => setState(() => _kategori = v!),
-                    ),
-                    const SizedBox(height: 16),
-                    if (_kategori != 'jalan') ...[
-                      TextFormField(
-                        controller: _jalanController,
-                        decoration: InputDecoration(
-                          labelText: 'Alamat Lengkap', 
-                          hintText: 'Masukkan alamat untuk mencari koordinat',
-                          border: const OutlineInputBorder(), 
-                          prefixIcon: const Icon(Icons.map), 
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.location_searching), 
-                            onPressed: _getLatLngFromAddress,
-                            tooltip: 'Cari Koordinat dari Alamat',
+      appBar: AppBar(
+        title: const OverflowMarqueeText('Input Data GIS'),
+        actions: [
+          IconButton(
+            onPressed: _openEditPicker,
+            tooltip: 'Edit data yang sudah ada',
+            icon: const Icon(Icons.edit_note),
+          ),
+          if (_isEditing)
+            IconButton(
+              onPressed: () => _resetForm(),
+              tooltip: 'Batal edit',
+              icon: const Icon(Icons.close),
+            ),
+          const SupabaseStatusDot(),
+        ],
+      ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return Stack(
+            children: [
+              SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16.0),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight - 32),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_isEditing) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.25)),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.edit, color: Color(0xFFF59E0B)),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: OverflowMarqueeText(
+                                    'Mode edit aktif. Perubahan akan memperbarui data yang sudah diunggah.',
+                                    style: TextStyle(
+                                      color: Color(0xFF92400E),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        DropdownButtonFormField<String>(
+                          initialValue: _kategori,
+                          decoration: const InputDecoration(labelText: 'Kategori Data', border: OutlineInputBorder()),
+                          items: [
+                            {'val': 'kandidat', 'label': 'KANDIDAT LOKASI BARU (POINT)'},
+                            {'val': 'bengkel', 'label': 'BENGKEL PESAING (POINT)'},
+                            {'val': 'fasum', 'label': 'FASILITAS UMUM (POINT)'},
+                          ].map((e) => DropdownMenuItem(value: e['val']!, child: Text(e['label']!))).toList(),
+                          onChanged: (v) => setState(() => _kategori = v!),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _namaController,
+                          decoration: const InputDecoration(labelText: 'Nama Lokasi', border: OutlineInputBorder(), prefixIcon: Icon(Icons.location_on)),
+                          validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _jalanController,
+                          decoration: InputDecoration(
+                            labelText: 'Alamat Lengkap', 
+                            hintText: 'Masukkan alamat untuk mencari koordinat',
+                            border: const OutlineInputBorder(), 
+                            prefixIcon: const Icon(Icons.map), 
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.location_searching), 
+                              onPressed: _getLatLngFromAddress,
+                              tooltip: 'Cari Koordinat dari Alamat',
+                            )
+                          ),
+                          validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: _bukaController,
+                                readOnly: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'Jam Buka', 
+                                  border: OutlineInputBorder(), 
+                                  prefixIcon: Icon(Icons.access_time),
+                                  hintText: '--:--',
+                                ),
+                                onTap: () async {
+                                  TimeOfDay initial = TimeOfDay.now();
+                                  if (_bukaController.text.isNotEmpty) {
+                                    final parts = _bukaController.text.split(':');
+                                    if (parts.length >= 2) {
+                                      initial = TimeOfDay(
+                                        hour: int.tryParse(parts[0]) ?? 8, 
+                                        minute: int.tryParse(parts[1]) ?? 0
+                                      );
+                                    }
+                                  }
+                                  TimeOfDay? picked = await showTimePicker(
+                                    context: context, 
+                                    initialTime: initial,
+                                    helpText: 'Pilih Jam Buka',
+                                  );
+                                  if (picked != null) {
+                                    setState(() {
+                                      _bukaController.text = "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _tutupController,
+                                readOnly: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'Jam Tutup', 
+                                  border: OutlineInputBorder(),
+                                  prefixIcon: Icon(Icons.access_time_filled),
+                                  hintText: '--:--',
+                                ),
+                                onTap: () async {
+                                  TimeOfDay initial = TimeOfDay.now();
+                                  if (_tutupController.text.isNotEmpty) {
+                                    final parts = _tutupController.text.split(':');
+                                    if (parts.length >= 2) {
+                                      initial = TimeOfDay(
+                                        hour: int.tryParse(parts[0]) ?? 17, 
+                                        minute: int.tryParse(parts[1]) ?? 0
+                                      );
+                                    }
+                                  }
+                                  TimeOfDay? picked = await showTimePicker(
+                                    context: context, 
+                                    initialTime: initial,
+                                    helpText: 'Pilih Jam Tutup',
+                                  );
+                                  if (picked != null) {
+                                    setState(() {
+                                      _tutupController.text = "${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}";
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        const Text('Pilih Hari Libur:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8.0,
+                          runSpacing: 4.0,
+                          children: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu', 'Hari Besar Libur'].map((day) {
+                            final isSelected = _selectedHariLibur.contains(day);
+                            return FilterChip(
+                              label: Text(day),
+                              selected: isSelected,
+                              selectedColor: const Color(0xFFF97316).withValues(alpha: 0.2),
+                              checkmarkColor: const Color(0xFFF97316),
+                              labelStyle: TextStyle(
+                                color: isSelected ? const Color(0xFFC2410C) : Colors.black87,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              onSelected: (selected) {
+                                setState(() {
+                                  if (selected) {
+                                    _selectedHariLibur.add(day);
+                                  } else {
+                                    _selectedHariLibur.remove(day);
+                                  }
+                                  const allDays = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu', 'Hari Besar Libur'];
+                                  _selectedHariLibur.sort((a, b) => allDays.indexOf(a).compareTo(allDays.indexOf(b)));
+                                  
+                                  if (_selectedHariLibur.isEmpty) {
+                                    _hariLiburController.text = '';
+                                  } else if (_selectedHariLibur.length == 1) {
+                                    _hariLiburController.text = _selectedHariLibur.first;
+                                  } else {
+                                    final last = _selectedHariLibur.last;
+                                    final others = _selectedHariLibur.sublist(0, _selectedHariLibur.length - 1);
+                                    _hariLiburController.text = "${others.join(', ')} dan ${last.toLowerCase()}";
+                                  }
+                                });
+                              },
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _luasLahanController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Luas Lahan (m2)', 
+                            hintText: 'Contoh: 150',
+                            border: OutlineInputBorder(), 
+                            prefixIcon: Icon(Icons.straighten),
+                            suffixText: 'm2',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<bool>(
+                          initialValue: _isResmi,
+                          decoration: const InputDecoration(
+                            labelText: 'Bengkel Resmi? (C4)', 
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.verified_user_rounded),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: true, child: Text('Ya (Bengkel Resmi)')),
+                            DropdownMenuItem(value: false, child: Text('Tidak (Bengkel Umum)')),
+                          ],
+                          onChanged: (val) => setState(() => _isResmi = val ?? false),
+                        ),
+                        const SizedBox(height: 8),
+
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: TextFormField(
+                                controller: _latController,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: const InputDecoration(
+                                  labelText: 'Latitude', 
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                                ),
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: TextFormField(
+                                controller: _lngController,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: const InputDecoration(
+                                  labelText: 'Longitude', 
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                                ),
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Column(
+                              children: [
+                                Material(
+                                  color: const Color(0xFF38BDF8).withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: IconButton(
+                                    onPressed: _determinePosition, 
+                                    icon: const Icon(Icons.my_location, color: Color(0xFF0284C7)),
+                                    tooltip: 'Ambil GPS',
+                                    constraints: const BoxConstraints(),
+                                    padding: const EdgeInsets.all(10),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Material(
+                                  color: const Color(0xFFF97316).withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: IconButton(
+                                    onPressed: _pickFromMap, 
+                                    icon: const Icon(Icons.map, color: Color(0xFFF97316)),
+                                    tooltip: 'Pilih dari Peta',
+                                    constraints: const BoxConstraints(),
+                                    padding: const EdgeInsets.all(10),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 20),
+                        const Text('Foto Dokumentasi:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 10),
+                        GestureDetector(
+                          onTap: _takePhoto,
+                          child: Container(
+                            height: 180,
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.grey.shade300)),
+                            child: _imageFile != null
+                                ? ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(_imageFile!, fit: BoxFit.cover))
+                                : (_existingFotoUrl != null && _existingFotoUrl!.isNotEmpty)
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Image.network(_existingFotoUrl!, fit: BoxFit.cover),
+                                      )
+                                    : const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.camera_alt, size: 50, color: Colors.grey), Text('Ambil Foto')]),
+                          ),
+                        ),
+                        if (_isEditing && _existingFotoUrl != null && _existingFotoUrl!.isNotEmpty && _imageFile == null)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Text(
+                              'Foto lama tetap dipakai jika Anda tidak mengambil foto baru.',
+                              style: TextStyle(fontSize: 12, color: Colors.blueGrey),
+                            ),
+                          ),
+
+                        const SizedBox(height: 30),
+                        ElevatedButton(
+                          onPressed: _submitData, 
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 15), 
+                            backgroundColor: const Color(0xFFF97316),
+                            foregroundColor: Colors.white
+                          ), 
+                          child: OverflowMarqueeText(
+                            _isEditing
+                                ? 'PERBARUI DATA POINT'
+                                : (_kategori == 'kandidat' ? 'ANALISIS LOKASI' : 'SIMPAN DATA POINT'),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)
                           )
                         ),
-                        validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    
-                    if (_kategori == 'jalan') ...[
-                      const Text('Daftar Titik Koordinat Jalan (Vektor Line):', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _verticesController,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          labelText: 'Vertices (lng lat, lng lat, ...)', 
-                          hintText: 'Contoh: 98.66 3.56, 98.67 3.57',
-                          border: OutlineInputBorder(),
-                          helperText: 'Gunakan tombol di bawah untuk menambah titik dari GPS HP.'
-                        ),
-                        validator: (v) => v == null || v.isEmpty ? 'Minimal harus ada 2 titik untuk sebuah jalan' : null,
-                      ),
-                      const SizedBox(height: 8),
-                      ElevatedButton.icon(
-                        onPressed: _addCurrentToVertices, 
-                        icon: const Icon(Icons.add_location_alt), 
-                        label: const Text('TAMBAH TITIK MANUAL'),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade50),
-                      ),
-                      const SizedBox(height: 8),
-                      ElevatedButton.icon(
-                        onPressed: _toggleTracking, 
-                        icon: Icon(_isTracking ? Icons.stop : Icons.play_arrow), 
-                        label: Text(_isTracking ? 'BERHENTI AUTO-TRACKING' : 'MULAI AUTO-TRACKING'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _isTracking ? Colors.red.shade100 : Colors.green.shade100,
-                          foregroundColor: _isTracking ? Colors.red : Colors.green,
-                        ),
-                      ),
-                      if (_isTracking)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green)),
-                              SizedBox(width: 8),
-                              Text("Sistem sedang merekam jejak GPS...", style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _latController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(labelText: 'Latitude', border: OutlineInputBorder()),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _lngController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(labelText: 'Longitude', border: OutlineInputBorder()),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: _determinePosition, 
-                          icon: const Icon(Icons.my_location, color: Colors.blue),
-                          tooltip: 'Ambil GPS',
-                        ),
+                        const SizedBox(height: 40),
                       ],
                     ),
-
-                    if (_kategori != 'jalan') ...[
-                      const SizedBox(height: 20),
-                      const Text('Foto Dokumentasi:', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 10),
-                      GestureDetector(
-                        onTap: _takePhoto,
-                        child: Container(
-                          height: 180,
-                          decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.grey)),
-                          child: _imageFile != null
-                              ? ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(_imageFile!, fit: BoxFit.cover))
-                              : const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.camera_alt, size: 50, color: Colors.grey), Text('Ambil Foto')]),
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 30),
-                    ElevatedButton(
-                      onPressed: _submitData, 
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 15), 
-                        backgroundColor: Colors.deepPurple, 
-                        foregroundColor: Colors.white
-                      ), 
-                      child: Text(
-                        _kategori == 'jalan' ? 'SIMPAN JALAN (LINE)' : (_kategori == 'kandidat' ? 'ANALISIS LOKASI' : 'SIMPAN DATA POINT'),
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)
-                      )
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+              if (_isLoading)
+                LoadingOverlayCard(
+                  progress: _loadingProgress,
+                  message: _loadingMsg,
+                  color: const Color(0xFFF97316),
+                ),
+            ],
+          );
+        }
+      ),
     );
   }
 }

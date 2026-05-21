@@ -1,0 +1,68 @@
+name: Build and Release APK
+
+on:
+  workflow_dispatch: # Allows manual trigger to "re-workflow"
+  push:
+    branches:
+      - master # Or your default branch
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build APK (ARM64)
+        run: |
+          flutter build apk --target-platform=android-arm64 --release
+          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/sig-bengkel-medan-baru-arm64.apk
+
+      - name: Build APK (ARM 32-bit)
+        run: |
+          flutter build apk --target-platform=android-arm --release
+          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/sig-bengkel-medan-baru-arm32.apk
+
+      - name: Generate Version Tag
+        id: tag
+        run: echo "tag_name=v1.0.${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag_name }}
+          name: Release ${{ steps.tag.outputs.tag_name }}
+          body: |
+            Automated Release for SIG Bengkel Motor Medan Baru.
+            
+            **Artifacts:**
+            * `sig-bengkel-medan-baru-arm64.apk` (64-bit)
+            * `sig-bengkel-medan-baru-arm32.apk` (32-bit)
+          draft: false
+          prerelease: false
+          make_latest: true
+          files: |
+            build/app/outputs/flutter-apk/sig-bengkel-medan-baru-arm64.apk
+            build/app/outputs/flutter-apk/sig-bengkel-medan-baru-arm32.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

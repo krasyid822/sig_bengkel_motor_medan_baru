@@ -1,6 +1,7 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:sig_bengkel_motor_medan_baru/ui/widgets/loading_overlay_card.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -13,6 +14,16 @@ class _CameraScreenState extends State<CameraScreen> {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
   bool _isReady = false;
+  double _loadingProgress = 0.0;
+  String _loadingMessage = 'Menyiapkan kamera...';
+
+  void _updateLoading(double progress, String message) {
+    if (!mounted) return;
+    setState(() {
+      _loadingProgress = progress.clamp(0.0, 1.0).toDouble();
+      _loadingMessage = message;
+    });
+  }
 
   @override
   void initState() {
@@ -22,18 +33,23 @@ class _CameraScreenState extends State<CameraScreen> {
 
   Future<void> _setupCameras() async {
     try {
+      _updateLoading(0.2, 'Mencari kamera yang tersedia...');
       _cameras = await availableCameras();
       if (_cameras != null && _cameras!.isNotEmpty) {
+        _updateLoading(0.5, 'Membuat controller kamera...');
         _controller = CameraController(
           _cameras![0],
           ResolutionPreset.medium,
           enableAudio: false,
         );
 
+        _updateLoading(0.8, 'Menginisialisasi preview kamera...');
         await _controller!.initialize();
         if (mounted) {
           setState(() {
             _isReady = true;
+            _loadingProgress = 1.0;
+            _loadingMessage = 'Kamera siap.';
           });
         }
       }
@@ -64,9 +80,22 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   Widget build(BuildContext context) {
     if (!_isReady || _controller == null) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator()),
+        body: Stack(
+          children: [
+            const ColoredBox(color: Colors.black),
+            LoadingOverlayCard(
+              progress: _loadingProgress,
+              message: _loadingMessage,
+              color: Colors.white,
+              cardColor: const Color(0xFF111827),
+              barrierColor: Colors.black.withValues(alpha: 0.24),
+              progressBackgroundColor: Colors.white24,
+              textColor: Colors.white,
+            ),
+          ],
+        ),
       );
     }
 
