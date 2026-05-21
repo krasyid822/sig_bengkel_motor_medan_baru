@@ -433,6 +433,11 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
       }
 
       advanceProgress(_isEditing ? 'Memperbarui data lokasi di database...' : 'Menyimpan data lokasi ke database...');
+      
+      // Keamanan data: Luas Lahan & Is Resmi hanya milik 'bengkel' (pesaing)
+      final bool finalIsResmi = _kategori == 'bengkel' ? _isResmi : false;
+      final double finalLuasLahan = _kategori == 'bengkel' ? (double.tryParse(_luasLahanController.text) ?? 0) : 0;
+
       final data = {
         'nama': _namaController.text,
         'kategori': _kategori,
@@ -442,8 +447,8 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
         'waktu_buka': _bukaController.text.isNotEmpty ? _bukaController.text : null,
         'waktu_tutup': _tutupController.text.isNotEmpty ? _tutupController.text : null,
         'hari_libur': _hariLiburController.text.isNotEmpty ? _hariLiburController.text : null,
-        'is_resmi': _isResmi,
-        'luas_lahan': double.tryParse(_luasLahanController.text) ?? 0,
+        'is_resmi': finalIsResmi,
+        'luas_lahan': finalLuasLahan,
       };
       if (_isEditing) {
         await _repository.updateLokasi(_editingLokasiId, data);
@@ -673,32 +678,34 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
                             );
                           }).toList(),
                         ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _luasLahanController,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Luas Lahan (m2)', 
-                            hintText: 'Contoh: 150',
-                            border: OutlineInputBorder(), 
-                            prefixIcon: Icon(Icons.straighten),
-                            suffixText: 'm2',
+                        if (_kategori == 'bengkel') ...[
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _luasLahanController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Luas Lahan (m2)', 
+                              hintText: 'Contoh: 150',
+                              border: OutlineInputBorder(), 
+                              prefixIcon: Icon(Icons.straighten),
+                              suffixText: 'm2',
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        DropdownButtonFormField<bool>(
-                          initialValue: _isResmi,
-                          decoration: const InputDecoration(
-                            labelText: 'Bengkel Resmi? (C4)', 
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.verified_user_rounded),
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<bool>(
+                            initialValue: _isResmi,
+                            decoration: const InputDecoration(
+                              labelText: 'Bengkel Resmi? (C4)', 
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.verified_user_rounded),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: true, child: Text('Ya (Bengkel Resmi)')),
+                              DropdownMenuItem(value: false, child: Text('Tidak (Bengkel Umum)')),
+                            ],
+                            onChanged: (val) => setState(() => _isResmi = val ?? false),
                           ),
-                          items: const [
-                            DropdownMenuItem(value: true, child: Text('Ya (Bengkel Resmi)')),
-                            DropdownMenuItem(value: false, child: Text('Tidak (Bengkel Umum)')),
-                          ],
-                          onChanged: (val) => setState(() => _isResmi = val ?? false),
-                        ),
+                        ],
                         const SizedBox(height: 8),
 
                         Row(

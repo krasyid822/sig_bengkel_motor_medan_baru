@@ -9,7 +9,7 @@ class DocumentationPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const OverflowMarqueeText('Dokumentasi Aplikasi'),
+        title: const OverflowMarqueeText('Dokumentasi & Panduan Proyek'),
         actions: const [
           SupabaseStatusDot(),
         ],
@@ -17,119 +17,192 @@ class DocumentationPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
-          _buildSection(
-            context,
-            'Tentang Aplikasi',
-            'Aplikasi SIG Bengkel Motor Medan Baru digunakan untuk penginputan data lokasi bengkel dan fasilitas umum di wilayah Medan Baru. Data yang dikumpulkan akan disimpan di Supabase dan dapat dipetakan.',
+          // 1. Identitas Kelompok (Sesuai Permintaan)
+          _buildIdentityCard(),
+          const SizedBox(height: 24),
+
+          // 2. Implementasi Data Vektor (Point, Line, Polygon)
+          _buildHeaderSection("I. Implementasi Data Vektor"),
+          _buildDetailedSection(
+            'Vektor POINT (Titik)',
+            '• Akurasi Koordinat: Presisi tinggi berbasis WGS84.\n'
+            '• Simbologi: Custom marker/ikon dinamis berdasarkan kategori lokasi.\n'
+            '• Popup Informasi: Detail metadata lengkap (Alamat, Jam Buka, Luas Lahan, Foto Dokumentasi).\n'
+            '• Clustering: Penanganan otomatis penumpukan data jika jumlah marker banyak.\n'
+            '• Geocoding: Pencarian koordinat dari alamat.\n'
+            '• Reverse Geocoding: Deteksi alamat otomatis saat memilih titik di peta.',
+            Icons.location_on,
           ),
-          _buildSection(
-            context,
-            'Fitur Unggulan',
-            '1. Ambil foto lokasi sebagai bukti fisik.\n'
-            '2. Deteksi lokasi via GPS otomatis dengan akurasi tinggi.\n'
-            '3. Pencarian Koordinat otomatis berdasarkan Alamat Lengkap (Geocoding).\n'
-            '4. Input Koordinat Manual (Latitude & Longitude) untuk fleksibilitas data.\n'
-            '5. Import/Export CSV untuk data point.\n'
-            '6. Import GeoJSON untuk boundary wilayah Medan Baru.\n'
-            '7. Analisis Spasial Terpadu (Buffer & SAW).',
+          _buildDetailedSection(
+            'Vektor LINE (Garis)',
+            '• Ketepatan Tracing: Jalur MultiLineString mengikuti jaringan jalan riil Medan Baru.\n'
+            '• Perhitungan Panjang: Estimasi jarak dalam satuan meter/km secara spasial.\n'
+            '• Styling Garis: Pengaturan warna (Biru Tua), ketebalan (4.0), dan dukungan visual untuk layer rute multi-segmen.\n'
+            '• Clipping Spasial: Garis jalan dipotong rapi menggunakan fungsi ST_Intersection agar hanya tampil di dalam wilayah kerja.',
+            Icons.route,
           ),
-          _buildSection(
-            context,
-            'Konektivitas Flutter & Supabase',
-            'Aplikasi terhubung ke Supabase melalui Supabase SDK dengan integrasi PostGIS:\n\n'
-            '1. VEKTOR POINT (Tabel lokasi): Input via GPS/Manual disimpan sebagai geometry(Point, 4326). Digunakan untuk Bengkel, Fasum, dan Kandidat.\n'
-            '2. VEKTOR LINE (View v_namajalan_utama): Data jaringan jalan wilayah Medan Baru yang sudah di-clip otomatis di dalam boundary.\n'
-            '3. VEKTOR POLYGON (BOUNDARY di aturan_sig): Batas wilayah Medan Baru diunggah melalui menu GeoJSON dan disimpan sebagai koordinat boundary.\n'
-            '4. SAW PERANGKINGAN: Proses normalisasi dan pembobotan dilakukan otomatis di database melalui SQL View v_rekomendasi_bengkel_saw yang menghitung jarak spasial antar objek secara realtime.',
+          _buildDetailedSection(
+            'Vektor POLYGON (Area)',
+            '• Ketepatan Batas: Area poligon administratif Kecamatan Medan Baru.\n'
+            '• Perhitungan Luas: Estimasi luas area dalam m2 atau hektar (ha).\n'
+            '• Visualisasi: Fill color (Hijau Toska) dengan opacity 0.1 untuk transparansi.\n'
+            '• Simbologi Tematik: Dukungan visualisasi choropleth untuk analisis kepadatan.\n'
+            '• Point-in-Polygon: Deteksi otomatis posisi kandidat terhadap batas wilayah.',
+            Icons.crop_square_rounded,
           ),
-          _buildSection(
-            context,
-            'Format Dataset CSV (Point)',
-            'Gunakan format kolom berikut untuk impor data massal:\n\n'
-            '• Untuk POINT: nama, kategori, jalan, longitude, latitude, foto_url, waktu_buka, waktu_tutup, hari_libur, is_resmi, luas_lahan\n\n'
-            'Contoh baris POINT:\n'
-            'Bengkel ABC, bengkel, Jl. Dr. Mansyur No. 1, 98.654321, 3.567890, https://..., 08:00, 17:00, Minggu, true, 150',
+
+          const SizedBox(height: 12),
+          // 3. Fungsionalitas Aplikasi
+          _buildHeaderSection("II. Fungsionalitas & User Manual"),
+          _buildDetailedSection(
+            'Fitur Utama Peta',
+            '• GPS Perangkat: Deteksi lokasi pengguna secara realtime dengan akurasi tinggi.\n'
+            '• Map Picker: Kemampuan memilih lokasi kandidat langsung dari antarmuka peta.\n'
+            '• Tampilan Responsif: Antarmuka adaptif untuk berbagai ukuran layar smartphone.',
+            Icons.phonelink_setup,
           ),
-          _buildSection(
-            context,
-            'Format Dataset GeoJSON',
-            'Gunakan menu GeoJSON untuk data vektor:\n\n'
-            '• Polygon/MultiPolygon: polygon pertama akan dipakai sebagai boundary Medan Baru.',
+          _buildDetailedSection(
+            'Panduan Penggunaan',
+            '1. Menu Peta: Visualisasi sebaran bengkel dan fasum.\n'
+            '2. Menu Ranking: Melihat hasil analisis SAW dan navigasi otomatis ke peta.\n'
+            '3. Menu Input: Tambah data via GPS, Geocoding, atau Map Picker.\n'
+            '4. Menu CSV/GeoJSON: Manajemen dataset vektor secara massal.',
+            Icons.menu_book,
           ),
-          _buildSection(
-            context,
-            'Cara Mendapatkan GeoJSON Batas Wilayah',
-            'Boundary Medan Baru bisa diambil dari layanan polygon OpenStreetMap:\n\n'
-            '• Link langsung:\n'
-            'http://polygons.openstreetmap.fr/get_geojson.py?id=9522401\n\n'
-            '• Penjelasan: link tersebut menghasilkan GeoJSON boundary dari OSM relation ID 9522401.\n'
-            '• Cara pakai: buka link di browser, simpan hasilnya sebagai file `.geojson` atau `.json`, lalu unggah lewat menu GeoJSON.\n'
-            '• Catatan: gunakan file ini khusus untuk batas wilayah.',
+
+          const SizedBox(height: 12),
+          // 4. Integrasi & Sinkronisasi
+          _buildHeaderSection("III. Integrasi Web - Mobile"),
+          _buildDetailedSection(
+            'Konektivitas & API',
+            '• REST API: Menggunakan protokol PostgREST untuk akses data berkecepatan tinggi.\n'
+            '• Sinkronisasi Realtime: Perubahan data di aplikasi mobile langsung terintegrasi dengan dashboard web (Leaflet).\n'
+            '• Autentikasi: Keamanan data menggunakan Anon Key dan Row Level Security (RLS) di sisi Supabase.',
+            Icons.sync_alt,
           ),
-          _buildSection(
-            context,
-            'Metode Buffer & SAW (GIS Terpadu)',
-            'Sistem ini menggunakan penggabungan dua metode analisis SIG untuk menentukan lokasi bengkel terbaik:\n\n'
-            '1. METODE BUFFER (Jangkauan)\n'
-            '• Area Aksesibilitas (C2): Radius 200m dari garis jalan utama.\n'
-            '• Area Kompetisi (C3): Radius 500m dari titik bengkel pesaing.\n\n'
-            '2. METODE SAW (Perankingan)\n'
-            'Menghitung skor otomatis dengan bobot dinamis dari database:\n'
-            '• C2 - Aksesibilitas (Cost): Jarak ke jalan utama. Menggunakan rumus MIN/VAL (Makin dekat jalan, skor makin mendekati 1.0).\n'
-            '• C3 - Jarak Pesaing (Benefit): Jarak ke kompetitor terdekat. Menggunakan rumus VAL/MAX (Makin jauh dari pesaing, skor makin tinggi untuk menghindari kejenuhan pasar).\n'
-            '• C4 - Status Resmi (Benefit): Lokasi yang direncanakan sebagai bengkel resmi mendapat skor prioritas.\n'
-            '• C5 - Luas Lahan (Benefit): Lokasi dengan luas lahan lebih besar mendapat preferensi lebih tinggi.\n\n'
-            'PENTING: Semua perhitungan dilakukan di sisi server (PostgreSQL/PostGIS) melalui View v_rekomendasi_bengkel_saw untuk menjaga akurasi spasial.',
+
+          const SizedBox(height: 12),
+          // 5. Dukungan Analisis Spasial
+          _buildHeaderSection("IV. Analisis Spasial Terpadu"),
+          _buildDetailedSection(
+            'Metode GIS Terpadu',
+            '• Analisis Buffer: Penentuan zona aksesibilitas (C2) dan zona kompetisi (C4).\n'
+            '• Metode SAW: Perankingan cerdas berbasis kriteria dinamis dari database (Jarak Jalan, Fasum, Peluang vs Kompetitor, Luas Lahan).\n'
+            '• Spatial Database: Logika perhitungan dipindahkan ke sisi server (PostGIS) untuk performa maksimal.',
+            Icons.analytics,
           ),
-          _buildSection(
-            context,
-            'Logika SQL & Spasial (Backend)',
-            'Aplikasi ini memanfaatkan fungsi engine PostGIS untuk perhitungan realtime:\n\n'
-            '1. ST_Distance: Menghitung jarak Euclidean (garis lurus) presisi antara koordinat GPS kandidat dengan objek GIS lainnya.\n'
-            '2. Geography Cast: Konversi koordinat (4326) ke meter agar hasil jarak akurat dalam satuan metrik.\n'
-            '3. Dynamic Normalization: Skor dinormalisasi secara otomatis (0.0 - 1.0) berdasarkan nilai tertinggi/terendah dari seluruh kandidat yang ada di database.\n'
-            '4. Spatial Clipping: Garis jalan dipotong otomatis tepat pada batas wilayah Medan Baru menggunakan fungsi ST_Intersection.',
-          ),
-          _buildSection(
-            context,
-            'Anggota Kelompok',
-            '- Rasyid\n- Putri\n- Rizky\n- Azura\n- Kevin',
-          ),
-          const SizedBox(height: 20),
+
+          const SizedBox(height: 30),
           const Divider(),
           const Center(
             child: Text(
-              'v1.1.0 - SIG Bengkel Motor',
-              style: TextStyle(color: Colors.grey),
+              'Presentasi SIG TRPL - 22 Mei 2026',
+              style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold),
             ),
           ),
+          const SizedBox(height: 40),
         ],
       ),
     );
   }
 
-  Widget _buildSection(BuildContext context, String title, String content) {
+  Widget _buildIdentityCard() {
     return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
+      elevation: 6,
+      color: const Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: const Padding(
+        padding: EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text('KELOMPOK 4', style: TextStyle(color: Color(0xFFF97316), fontWeight: FontWeight.bold, fontSize: 14, letterSpacing: 1.2)),
+            SizedBox(height: 12),
             Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFFF97316),
-                  ),
+              'Sistem Informasi Geografis Menggunakan Analisis Buffer dan Metode SAW untuk Penentuan Lokasi Strategis Usaha Bengkel Motor di Kecamatan Medan Baru',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17, height: 1.4),
             ),
-            const SizedBox(height: 8),
+            Divider(color: Colors.white24, height: 32),
+            _IdentityRow(label: 'Kelas', value: 'TRPL-6A'),
+            _IdentityRow(label: 'Tanggal', value: '22 Mei 2026'),
+            _IdentityRow(label: 'Dosen', value: 'Donny Sanjaya, M.Kom'),
+            SizedBox(height: 16),
+            Text('Anggota Tim:', style: TextStyle(color: Color(0xFFF97316), fontSize: 12, fontWeight: FontWeight.bold)),
+            SizedBox(height: 4),
+            Text('• Rasyid Kurniawan (2305181077)', style: TextStyle(color: Colors.white, fontSize: 14)),
+            Text('• Putri Aprilia', style: TextStyle(color: Colors.white, fontSize: 14)),
+            Text('• M Rizky Andika', style: TextStyle(color: Colors.white, fontSize: 14)),
+            Text('• Azura T Barus', style: TextStyle(color: Colors.white, fontSize: 14)),
+            Text('• Kevin', style: TextStyle(color: Colors.white, fontSize: 14)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderSection(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+      child: Container(
+        padding: const EdgeInsets.only(left: 12),
+        decoration: const BoxDecoration(
+          border: Border(left: BorderSide(color: Color(0xFFF97316), width: 4))
+        ),
+        child: Text(
+          title,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailedSection(String title, String content, IconData icon) {
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: const Color(0xFFF97316), size: 24),
+                const SizedBox(width: 12),
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1E293B))),
+              ],
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(height: 1),
+            ),
             Text(
               content,
-              style: const TextStyle(fontSize: 14, height: 1.5),
+              style: const TextStyle(fontSize: 13, height: 1.6, color: Color(0xFF334155), letterSpacing: 0.2),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _IdentityRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _IdentityRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(width: 80, child: Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13))),
+          const Text(': ', style: TextStyle(color: Colors.white70)),
+          Expanded(child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600))),
+        ],
       ),
     );
   }
