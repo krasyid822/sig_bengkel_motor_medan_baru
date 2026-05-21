@@ -1,17 +1,61 @@
 import 'package:flutter/material.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/widgets/overflow_marquee_text.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/widgets/supabase_status_dot.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DocumentationPage extends StatelessWidget {
   const DocumentationPage({super.key});
 
+  void _showLoginDialog(BuildContext context) {
+    final emailController = TextEditingController();
+    final passController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Admin Login'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: emailController, decoration: const InputDecoration(labelText: 'Email')),
+            TextField(controller: passController, decoration: const InputDecoration(labelText: 'Password'), obscureText: true),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await Supabase.instance.client.auth.signInWithPassword(
+                  email: emailController.text.trim(),
+                  password: passController.text.trim(),
+                );
+                if (context.mounted) {
+                   Navigator.pop(context);
+                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Login Berhasil!')));
+                }
+              } catch (e) {
+                if (context.mounted) {
+                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal: $e')));
+                }
+              }
+            }, 
+            child: const Text('Login')
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool isLoggedIn = Supabase.instance.client.auth.currentUser != null;
+
     return Scaffold(
       appBar: AppBar(
         title: const OverflowMarqueeText('Dokumentasi & Panduan Proyek'),
-        actions: const [
-          SupabaseStatusDot(),
+        actions: [
+          const SupabaseStatusDot(),
         ],
       ),
       body: ListView(
@@ -66,7 +110,9 @@ class DocumentationPage extends StatelessWidget {
             '1. Menu Peta: Visualisasi sebaran bengkel dan fasum.\n'
             '2. Menu Ranking: Melihat hasil analisis SAW dan navigasi otomatis ke peta.\n'
             '3. Menu Input: Tambah data via GPS, Geocoding, atau Map Picker.\n'
-            '4. Menu CSV/GeoJSON: Manajemen dataset vektor secara massal.',
+            '4. Menu CSV/GeoJSON: Manajemen dataset vektor (Admin Only).\n'
+            '5. Menu Profil: Login untuk akses fitur Admin & Logout.\n'
+            '6. Menu Info: Dokumentasi dan panduan proyek.',
             Icons.menu_book,
           ),
 
@@ -76,8 +122,8 @@ class DocumentationPage extends StatelessWidget {
           _buildDetailedSection(
             'Konektivitas & API',
             '• REST API: Menggunakan protokol PostgREST untuk akses data berkecepatan tinggi.\n'
-            '• Sinkronisasi Realtime: Perubahan data di aplikasi mobile langsung terintegrasi dengan dashboard web (Leaflet).\n'
-            '• Autentikasi: Keamanan data menggunakan Anon Key dan Row Level Security (RLS) di sisi Supabase.',
+            '• Sinkronisasi Realtime: Perubahan data langsung terintegrasi.\n'
+            '• Autentikasi RBAC: Sistem berbasis peran menggunakan Supabase Row Level Security (RLS) untuk membedakan hak akses antara pengguna tamu (anon) dan admin (authenticated).',
             Icons.sync_alt,
           ),
 

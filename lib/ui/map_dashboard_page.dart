@@ -604,9 +604,13 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
                           ],
                         ),
                         const Divider(),
-                        _buildLegendItem(Icons.stars, const Color(0xFF10B981), "Kandidat Strategis"),
+                        _buildLegendItem(Icons.stars, const Color(0xFF10B981), "Kandidat Strategis (Rank 1)"),
+                        _buildLegendItem(Icons.stars, const Color(0xFFF59E0B), "Kandidat Potensial (Rank 2-3)"),
                         _buildLegendItem(Icons.build, const Color(0xFFEF4444), "Bengkel Kompetitor"),
-                        _buildLegendItem(Icons.radar, const Color(0xFF38BDF8), "Area Jangkauan (Buffer)"),
+                        _buildLegendItem(Icons.radar, const Color(0xFF38BDF8), "Fasilitas Umum (Fasum)"),
+                        _buildLegendItem(Icons.circle, Colors.blueGrey.withValues(alpha: 0.4), "Area Jangkauan (Buffer)"),
+                        _buildLegendItem(Icons.route, const Color(0xFF1E40AF), "Jaringan Jalan Utama"),
+                        _buildLegendItem(Icons.crop_square_rounded, const Color(0xFF0F766E), "Batas Wilayah Medan Baru"),
                         const Divider(),
                         const Text("Kriteria SAW (Dinamis):", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                         ..._rules.where((r) => !['BOUNDARY', 'wilayah'].contains(r['kode_kriteria']) && !['BOUNDARY', 'wilayah'].contains(r['tipe_kriteria'])).map((rule) {
@@ -614,15 +618,13 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
                           final String nama = rule['nama_kriteria'] ?? '';
                           
                           IconData icon = Icons.analytics;
-                          if (kode == 'C1') icon = Icons.people;
                           if (kode == 'C2') icon = Icons.route;
-                          if (kode == 'C3') icon = Icons.storefront;
-                          if (kode == 'C4') icon = Icons.verified;
+                          if (kode == 'C3') icon = Icons.radar;
+                          if (kode == 'C4') icon = Icons.build_circle;
+                          if (kode == 'C5') icon = Icons.straighten;
                           
                           return _buildLegendItem(icon, Colors.grey.shade700, "$nama ($kode)");
                         }),
-                        if (_showBoundary)
-                          _buildLegendItem(Icons.polyline, const Color(0xFF38BDF8), "Batas Wilayah"),
                       ],
                     ),
                   ),

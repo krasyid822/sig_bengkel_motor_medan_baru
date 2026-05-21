@@ -10,6 +10,7 @@ import 'package:sig_bengkel_motor_medan_baru/ui/data_collection_page.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/documentation_page.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/geojson_import_page.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/map_dashboard_page.dart';
+import 'package:sig_bengkel_motor_medan_baru/ui/profile_page.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/saw_process_page.dart';
 
 Future<void> main() async {
@@ -68,8 +69,9 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
-  int _currentIndex = 2; // Default ke menu Input (index 2)
-  late StreamSubscription _intentDataStreamSubscription;
+  int _currentIndex = 0; // Default ke Peta
+  late StreamSubscription<AuthState> _authSubscription;
+  User? _user;
   
   // State untuk navigasi ke lokasi spesifik di peta
   LatLng? _targetLocation;
@@ -78,44 +80,52 @@ class _MainPageState extends State<MainPage> {
   @override
   void initState() {
     super.initState();
+    _user = Supabase.instance.client.auth.currentUser;
+    _setupAuthListener();
     _setupSharingIntentListener();
   }
 
+  void _setupAuthListener() {
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      setState(() {
+        _user = data.session?.user;
+        // Jika logout dan sedang di halaman terlarang (CSV & GeoJSON), pindah ke peta
+        if (_user == null && [3, 4].contains(_currentIndex)) {
+          _currentIndex = 0;
+        }
+      });
+    });
+  }
+
   void _setupSharingIntentListener() {
-    // 1. Menangani Share (Media, URL, Text) saat aplikasi di foreground/background
-    _intentDataStreamSubscription =
-        ReceiveSharingIntent.instance.getMediaStream().listen((List<SharedMediaFile> value) {
-      _handleSharedMedia(value);
+    // 1. Menangani Share saat aplikasi di foreground/background
+    ReceiveSharingIntent.instance.getMediaStream().listen((List<SharedMediaFile> value) {
+      if (_user != null) _handleSharedMedia(value);
     }, onError: (err) {
       debugPrint("getMediaStream error: $err");
     });
 
     // 2. Menangani Share saat aplikasi cold start
     ReceiveSharingIntent.instance.getInitialMedia().then((List<SharedMediaFile> value) {
-      _handleSharedMedia(value);
+      if (_user != null) _handleSharedMedia(value);
     });
   }
 
   void _handleSharedMedia(List<SharedMediaFile> value) {
     if (value.isNotEmpty) {
       final sharedFile = value.first;
-      
       if (sharedFile.path.toLowerCase().endsWith('.csv')) {
-        setState(() {
-          _currentIndex = 3; // Pindah ke tab CSV
-        });
+        setState(() => _currentIndex = 3);
       } else if (sharedFile.path.toLowerCase().endsWith('.geojson') ||
           sharedFile.path.toLowerCase().endsWith('.json')) {
-        setState(() {
-          _currentIndex = 4; // Pindah ke tab GeoJSON
-        });
+        setState(() => _currentIndex = 4);
       }
     }
   }
 
   @override
   void dispose() {
-    _intentDataStreamSubscription.cancel();
+    _authSubscription.cancel();
     super.dispose();
   }
 
@@ -123,76 +133,66 @@ class _MainPageState extends State<MainPage> {
     setState(() {
       _targetLocation = location;
       _targetLocationId = id;
-      _currentIndex = 0; // Pindah ke tab Peta (index 0)
+      _currentIndex = 0; 
     });
   }
 
-  List<Widget> _pages() => [
-    MapDashboardPage(
-      targetLocation: _targetLocation, 
-      targetId: _targetLocationId,
-      onLocationHandled: () {
-        setState(() {
-          _targetLocation = null;
-          _targetLocationId = null;
-        });
-      },
-    ),
-    SawProcessPage(onLocationTap: _onJumpToLocation),
-    const DataCollectionPage(),
-    const CsvImportPage(),
-    const GeoJsonImportPage(),
-    const DocumentationPage(),
-  ];
+  // Definisi semua halaman
+  Widget _getPage(int index) {
+    switch (index) {
+      case 0:
+        return MapDashboardPage(
+          targetLocation: _targetLocation, 
+          targetId: _targetLocationId,
+          onLocationHandled: () {
+            setState(() {
+              _targetLocation = null;
+              _targetLocationId = null;
+            });
+          },
+        );
+      case 1: return SawProcessPage(onLocationTap: _onJumpToLocation);
+      case 2: return const DataCollectionPage();
+      case 3: return const CsvImportPage();
+      case 4: return const GeoJsonImportPage();
+      case 5: return const ProfilePage();
+      case 6: return const DocumentationPage();
+      default: return const MapDashboardPage();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final bool isLoggedIn = _user != null;
+
+    // Filter menu berdasarkan role
+    final List<Map<String, dynamic>> menuItems = [
+      {'index': 0, 'icon': Icons.map, 'label': 'Peta'},
+      {'index': 1, 'icon': Icons.format_list_numbered, 'label': 'Ranking'},
+      {'index': 2, 'icon': Icons.add_location_alt, 'label': 'Input'},
+      if (isLoggedIn) {'index': 3, 'icon': Icons.upload_file, 'label': 'CSV'},
+      if (isLoggedIn) {'index': 4, 'icon': Icons.polyline, 'label': 'GeoJSON'},
+      {'index': 5, 'icon': Icons.person, 'label': 'Profil'},
+      {'index': 6, 'icon': Icons.menu_book, 'label': 'Info'},
+    ];
+
     return Scaffold(
-      body: _pages()[_currentIndex],
+      body: _getPage(_currentIndex),
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: Colors.white,
-        currentIndex: _currentIndex,
-        onTap: (index) {
+        currentIndex: menuItems.indexWhere((m) => m['index'] == _currentIndex),
+        onTap: (displayIndex) {
           setState(() {
-            _currentIndex = index;
+            _currentIndex = menuItems[displayIndex]['index'];
           });
         },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: const Color(0xFFF97316),
         unselectedItemColor: Colors.blueGrey,
-        showUnselectedLabels: true,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.map_outlined),
-            activeIcon: Icon(Icons.map),
-            label: 'Peta',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.format_list_numbered_outlined),
-            activeIcon: Icon(Icons.format_list_numbered),
-            label: 'Ranking',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.add_location_alt_outlined),
-            activeIcon: Icon(Icons.add_location_alt),
-            label: 'Input',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.upload_file_outlined),
-            activeIcon: Icon(Icons.upload_file),
-            label: 'CSV',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.polyline_outlined),
-            activeIcon: Icon(Icons.polyline),
-            label: 'GeoJSON',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.menu_book_outlined),
-            activeIcon: Icon(Icons.menu_book),
-            label: 'Info',
-          ),
-        ],
+        items: menuItems.map((m) => BottomNavigationBarItem(
+          icon: Icon(m['icon']),
+          label: m['label'],
+        )).toList(),
       ),
     );
   }

@@ -53,16 +53,19 @@ INSERT INTO aturan_sig (kode_kriteria, nama_kriteria, bobot, radius_buffer, tipe
 ```
 
 ### Penting: Konfigurasi Row Level Security (RLS)
-Agar aplikasi dapat membaca tabel `aturan_sig` melalui API/Anon Key, Anda **WAJIB** mengatur Policies di Dashboard Supabase:
-1. Masuk ke **Authentication > Policies**.
-2. Pilih tabel `aturan_sig`.
-3. Klik **New Policy** > **Create a policy from scratch**.
-4. Pilih **Allowed Operation: SELECT**.
-5. Pilih **Target Roles: anon**.
-6. Pada bagian **Using expression**, masukkan: `true`.
-7. Klik **Save Policy**.
+Sistem ini menggunakan autentikasi berbasis peran (Role-Based Access) melalui Supabase RLS untuk menjamin keamanan data:
 
-*Lakukan hal yang sama (SELECT & INSERT) untuk tabel `lokasi` agar data dapat tersimpan.*
+1. **Akses Publik (anon)**:
+   - **Tabel `aturan_sig`**: `SELECT` diizinkan agar semua pengguna dapat melihat bobot analisis SAW.
+   - **Tabel `lokasi`**: `SELECT`, `INSERT`, dan `DELETE` diizinkan. Ini memungkinkan pengguna (termasuk tamu) untuk menginput data kandidat dan menghapus analisis mereka sendiri tanpa harus login.
+
+2. **Akses Terbatas (Admin/Authenticated)**:
+   - Jika Anda ingin membatasi fitur tertentu (seperti unggah CSV/GeoJSON atau modifikasi data bengkel resmi) hanya untuk Admin, tambahkan kebijakan RLS dengan kondisi: `auth.uid() IS NOT NULL` atau `auth.jwt() ->> 'role' = 'authenticated'`.
+
+3. **Cara Konfigurasi**:
+   - Masuk ke **Authentication > Policies** di Dashboard Supabase.
+   - Pilih tabel terkait, lalu buat atau sesuaikan policy untuk operasi `SELECT`, `INSERT`, atau `DELETE`.
+   - Pastikan Role **anon** diberikan izin yang sesuai.
 
 # Format Dataset CSV (Point)
 
@@ -92,7 +95,13 @@ Agar aplikasi dapat membaca tabel `aturan_sig` melalui API/Anon Key, Anda **WAJI
 * Perankingan lokasi terbaik untuk pendirian bengkel baru dengan navigasi otomatis ke peta.
 * Visualisasi peta dengan layer buffer area dan clipping otomatis garis jalan di dalam boundary.
 
-# Web Leaflet Connection Guide (Laravel)
+# Panduan Penggunaan
+1. **Menu Peta**: Visualisasi data spasial (Bengkel, Fasum, Kandidat).
+2. **Menu Ranking**: Analisis kelayakan lokasi menggunakan metode SAW.
+3. **Menu Input**: Pengumpulan data lapangan dengan integrasi GPS.
+4. **Menu CSV/GeoJSON**: Manajemen data masal (Hanya Admin).
+5. **Menu Profil**: Manajemen akun (Login/Logout).
+6. **Menu Info**: Dokumentasi dan panduan proyek.
 
 Untuk menghubungkan dashboard web Laravel ke database Supabase yang sama dengan aplikasi mobile, gunakan View `v_lokasi_peta` yang mengembalikan format GeoJSON siap pakai.
 
@@ -106,3 +115,5 @@ Untuk menghubungkan dashboard web Laravel ke database Supabase yang sama dengan 
 | **Sangat Strategis** | `#10B981` | Marker Ranking 1 | Hijau menandakan kelayakan tertinggi. |
 | **Cukup Strategis** | `#F59E0B` | Marker Ranking 2-3 | Kuning sebagai alternatif strategis kedua. |
 | **Kurang Strategis** | `#EF4444` | Marker Kompetitor | Merah untuk menandai area jenuh pasar. |
+
+adminsig1

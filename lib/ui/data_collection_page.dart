@@ -10,6 +10,7 @@ import 'package:sig_bengkel_motor_medan_baru/ui/map_picker_page.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/widgets/loading_overlay_card.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/widgets/overflow_marquee_text.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/widgets/supabase_status_dot.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DataCollectionPage extends StatefulWidget {
   const DataCollectionPage({super.key});
@@ -29,7 +30,7 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
   final _hariLiburController = TextEditingController();
   final _luasLahanController = TextEditingController();
   
-  String _kategori = 'bengkel';
+  String _kategori = 'kandidat';
   bool _isResmi = false;
   List<String> _selectedHariLibur = [];
   File? _imageFile;
@@ -239,7 +240,7 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
     _hariLiburController.clear();
     _luasLahanController.clear();
     setState(() {
-      _kategori = 'bengkel';
+      _kategori = 'kandidat';
       _isResmi = false;
       _selectedHariLibur = [];
       _imageFile = null;
@@ -254,7 +255,11 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
   Future<void> _openEditPicker() async {
     _updateLoading(message: 'Mengambil data yang bisa diedit...', progress: 0.2);
     try {
-      final items = await _repository.fetchAllLokasi();
+      var items = await _repository.fetchAllLokasi();
+      final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
+      if (!isLoggedIn) {
+        items = items.where((item) => item['kategori']?.toString().toLowerCase() == 'kandidat').toList();
+      }
       if (!mounted) return;
       setState(() => _isLoading = false);
 
@@ -531,15 +536,34 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
                           ),
                           const SizedBox(height: 16),
                         ],
-                        DropdownButtonFormField<String>(
-                          initialValue: _kategori,
-                          decoration: const InputDecoration(labelText: 'Kategori Data', border: OutlineInputBorder()),
-                          items: [
-                            {'val': 'kandidat', 'label': 'KANDIDAT LOKASI BARU (POINT)'},
-                            {'val': 'bengkel', 'label': 'BENGKEL PESAING (POINT)'},
-                            {'val': 'fasum', 'label': 'FASILITAS UMUM (POINT)'},
-                          ].map((e) => DropdownMenuItem(value: e['val']!, child: Text(e['label']!))).toList(),
-                          onChanged: (v) => setState(() => _kategori = v!),
+                        Builder(
+                          builder: (context) {
+                            final dropdownItems = [
+                              {'val': 'kandidat', 'label': 'KANDIDAT LOKASI BARU (POINT)'},
+                              if (Supabase.instance.client.auth.currentUser != null) ...[
+                                {'val': 'bengkel', 'label': 'BENGKEL PESAING (POINT)'},
+                                {'val': 'fasum', 'label': 'FASILITAS UMUM (POINT)'},
+                              ],
+                            ];
+                            final hasKategori = dropdownItems.any((e) => e['val'] == _kategori);
+                            final currentKategori = hasKategori ? _kategori : 'kandidat';
+
+                            return DropdownButtonFormField<String>(
+                              value: currentKategori,
+                              decoration: const InputDecoration(labelText: 'Kategori Data', border: OutlineInputBorder()),
+                              items: dropdownItems.map((e) => DropdownMenuItem(value: e['val']!, child: Text(e['label']!))).toList(),
+                              onChanged: (v) {
+                                setState(() {
+                                  _kategori = v!;
+                                  // Reset is_resmi & luas_lahan if not bengkel
+                                  if (_kategori != 'bengkel') {
+                                    _isResmi = false;
+                                    _luasLahanController.clear();
+                                  }
+                                });
+                              },
+                            );
+                          }
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
