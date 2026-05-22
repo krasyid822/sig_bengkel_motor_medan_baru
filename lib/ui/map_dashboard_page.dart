@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -330,6 +331,47 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
     }
   }
 
+  double _calculateArea(List<LatLng> points) {
+    if (points.length < 3) return 0;
+    const double earthRadius = 6378137; // WGS84 Semi-major axis
+    double area = 0;
+
+    for (int i = 0; i < points.length; i++) {
+      LatLng p1 = points[i];
+      LatLng p2 = points[(i + 1) % points.length];
+      
+      double rad(double deg) => deg * (3.1415926535897932 / 180.0);
+      
+      area += rad(p2.longitude - p1.longitude) * 
+              (2 + math.sin(rad(p1.latitude)) + math.sin(rad(p2.latitude)));
+    }
+
+    area = (area * earthRadius * earthRadius / 2.0).abs();
+    return area / 10000; // Konversi dari m2 ke Hektar (Ha)
+  }
+
+  void _showAreaInfo() {
+    double areaHa = _calculateArea(_medanBaruBoundary);
+    String areaInfo = "Kecamatan Medan Baru\nLuas Wilayah: ${areaHa.toStringAsFixed(2)} Ha";
+    
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.layers, color: Colors.white),
+            const SizedBox(width: 12),
+            Text(areaInfo, style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        backgroundColor: const Color(0xFF0F766E),
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
   void _showLocationDetail(Map<String, dynamic> data) {
     showModalBottomSheet(
       context: context,
@@ -555,15 +597,20 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
                     userAgentPackageName: 'trpl6a.sig.rasyid.sig_bengkel_motor_medan_baru',
                   ),
                   if (_showBoundary && _medanBaruBoundary.isNotEmpty)
-                    PolygonLayer(
-                      polygons: [
-                        Polygon(
-                          points: _medanBaruBoundary,
-                          color: const Color(0xFF0F766E).withValues(alpha: 0.1), // Hijau Toska Tua Transparan
-                          borderColor: const Color(0xFF0F766E),
-                          borderStrokeWidth: 3.0,
-                        ),
-                      ],
+                    GestureDetector(
+                      onTapUp: (details) {
+                        _showAreaInfo();
+                      },
+                      child: PolygonLayer(
+                        polygons: [
+                          Polygon(
+                            points: _medanBaruBoundary,
+                            color: const Color(0xFF0F766E).withValues(alpha: 0.1), // Hijau Toska Tua Transparan
+                            borderColor: const Color(0xFF0F766E),
+                            borderStrokeWidth: 3.0,
+                          ),
+                        ],
+                      ),
                     ),
                   if (_showRoads && _roadLines.isNotEmpty) PolylineLayer(polylines: _roadLines),
                   if (_showBuffers && _circles.isNotEmpty) CircleLayer(circles: _circles),
