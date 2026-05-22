@@ -1,55 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/widgets/overflow_marquee_text.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/widgets/supabase_status_dot.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DocumentationPage extends StatelessWidget {
   const DocumentationPage({super.key});
 
-  void _showLoginDialog(BuildContext context) {
-    final emailController = TextEditingController();
-    final passController = TextEditingController();
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Admin Login'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: emailController, decoration: const InputDecoration(labelText: 'Email')),
-            TextField(controller: passController, decoration: const InputDecoration(labelText: 'Password'), obscureText: true),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await Supabase.instance.client.auth.signInWithPassword(
-                  email: emailController.text.trim(),
-                  password: passController.text.trim(),
-                );
-                if (context.mounted) {
-                   Navigator.pop(context);
-                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Login Berhasil!')));
-                }
-              } catch (e) {
-                if (context.mounted) {
-                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal: $e')));
-                }
-              }
-            }, 
-            child: const Text('Login')
-          ),
-        ],
-      ),
-    );
-  }
+  // Fungsi login dialihkan ke ProfilePage
 
   @override
   Widget build(BuildContext context) {
-    final bool isLoggedIn = Supabase.instance.client.auth.currentUser != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -108,7 +67,7 @@ class DocumentationPage extends StatelessWidget {
           _buildDetailedSection(
             'Panduan Penggunaan',
             '1. Menu Peta: Visualisasi sebaran bengkel dan fasum.\n'
-            '2. Menu Ranking: Melihat hasil analisis SAW dan navigasi otomatis ke peta.\n'
+            '2. Menu Ranking: Melihat hasil analisis SAW dan navigasi otomatis ke peta. Tersedia fitur "Kandidat Otomatis" untuk menemukan lokasi potensial baru.\n'
             '3. Menu Input: Tambah data via GPS, Geocoding, atau Map Picker.\n'
             '4. Menu CSV/GeoJSON: Manajemen dataset vektor (Admin Only).\n'
             '5. Menu Profil: Login untuk akses fitur Admin & Logout.\n'
@@ -136,6 +95,22 @@ class DocumentationPage extends StatelessWidget {
             '• Metode SAW: Perankingan cerdas berbasis kriteria dinamis dari database (Jarak Jalan, Fasum, Peluang vs Kompetitor, Luas Lahan).\n'
             '• Spatial Database: Logika perhitungan dipindahkan ke sisi server (PostGIS) untuk performa maksimal.',
             Icons.analytics,
+          ),
+          _buildDetailedSection(
+            'Inovasi: Auto-Candidate Discovery',
+            'Sistem mengintegrasikan algoritma pemindaian spasial otomatis untuk memitigasi human error dalam penentuan lokasi:\n'
+            '• Dynamic Grid Spawning: Mesin PostGIS memecah poligon batas wilayah (Boundary) menjadi ratusan koordinat sampel secara realtime menggunakan fungsi ST_GeneratePoints.\n'
+            '• Competitive Conflict Detection: Setiap sampel divalidasi silang terhadap radius buffer bengkel kompetitor (C3). Sampel dalam zona jenuh otomatis dieliminasi.\n'
+            '• Infrastructure Proximity Logic: Lokasi yang lolos seleksi diprioritaskan berdasarkan kedekatan akses terhadap jaringan jalan utama (C2).',
+            Icons.auto_awesome,
+          ),
+          _buildDetailedSection(
+            'Implementasi pada Dashboard Web',
+            'Logika analisis otomatis ini dirancang secara agnostic sehingga dapat diterapkan pada dashboard berbasis web (misalnya Laravel + Leaflet):\n'
+            '• Server-Side Logic: Seluruh pemrosesan tetap berada di level Database (PostgreSQL/PostGIS), memastikan hasil yang konsisten antara Mobile dan Web.\n'
+            '• API Integration: Web dapat memanggil fungsi RPC "suggest_kandidat_otomatis" yang sama melalui client library Supabase atau REST API.\n'
+            '• Visualisasi GeoJSON: Hasil koordinat dari SQL dikonversi menjadi layer GeoJSON dinamis di atas peta Leaflet untuk verifikasi administratif di layar lebar.',
+            Icons.web,
           ),
 
           const SizedBox(height: 30),
@@ -176,7 +151,7 @@ class DocumentationPage extends StatelessWidget {
             Text('Anggota Tim:', style: TextStyle(color: Color(0xFFF97316), fontSize: 12, fontWeight: FontWeight.bold)),
             SizedBox(height: 4),
             Text('• Rasyid Kurniawan (2305181077)', style: TextStyle(color: Colors.white, fontSize: 14)),
-            Text('• Putri Aprilia', style: TextStyle(color: Colors.white, fontSize: 14)),
+            Text('• Putri Aprilia (2305181009)', style: TextStyle(color: Colors.white, fontSize: 14)),
             Text('• M Rizky Andika', style: TextStyle(color: Colors.white, fontSize: 14)),
             Text('• Azura T Barus', style: TextStyle(color: Colors.white, fontSize: 14)),
             Text('• Kevin', style: TextStyle(color: Colors.white, fontSize: 14)),

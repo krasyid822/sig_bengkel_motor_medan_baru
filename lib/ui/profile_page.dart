@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:sig_bengkel_motor_medan_baru/ui/widgets/overflow_marquee_text.dart';
+import 'package:sig_bengkel_motor_medan_baru/ui/widgets/supabase_status_dot.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -18,7 +18,9 @@ class _ProfilePageState extends State<ProfilePage> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       await Supabase.instance.client.auth.signOut();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Berhasil Logout')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Berhasil Logout')));
+      }
     } else {
       setState(() => _isLoading = true);
       try {
@@ -26,9 +28,13 @@ class _ProfilePageState extends State<ProfilePage> {
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Login Berhasil!')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Login Berhasil!')));
+        }
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal: $e')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal: $e')));
+        }
       } finally {
         if (mounted) setState(() => _isLoading = false);
       }
@@ -41,7 +47,12 @@ class _ProfilePageState extends State<ProfilePage> {
     final isLoggedIn = user != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profil Admin')),
+      appBar: AppBar(
+        title: const Text('Profil Admin'),
+        actions: const [
+          SupabaseStatusDot(),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
@@ -61,7 +72,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ElevatedButton(
               onPressed: _isLoading ? null : _handleAuth,
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF97316), foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 50)),
-              child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : Text(isLoggedIn ? 'Logout' : 'Login'),
+              child: _isLoading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : Text(isLoggedIn ? 'Logout' : 'Login'),
             ),
           ],
         ),

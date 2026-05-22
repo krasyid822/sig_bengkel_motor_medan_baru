@@ -11,12 +11,14 @@ class MapDashboardPage extends StatefulWidget {
   final LatLng? targetLocation;
   final String? targetId;
   final VoidCallback? onLocationHandled;
+  final Function(LatLng)? onConfirmSelection;
 
   const MapDashboardPage({
     super.key, 
     this.targetLocation, 
     this.targetId,
     this.onLocationHandled,
+    this.onConfirmSelection,
   });
 
   @override
@@ -29,9 +31,9 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
   List<Marker> _markers = [];
   List<CircleMarker> _circles = [];
   List<Polyline> _roadLines = []; // Data Vector Line (Jalan)
-  List<Map<String, dynamic>> _rules = []; // Aturan lengkap dari DB
   Map<String, int> _bufferRules = {}; // Shortcut radius
   List<LatLng> _medanBaruBoundary = []; // Batas wilayah dari DB
+  LatLng? _activeAutoKandidat; // State lokal untuk menjaga tombol konfirmasi
   bool _isLoading = true;
   bool _showBuffers = true;
   bool _showBoundary = true;
@@ -64,8 +66,15 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
         debugPrint("Navigating map to: ${widget.targetLocation}");
         _mapController.move(widget.targetLocation!, 17.5); // Zoom lebih dekat (17.5)
         
-        // Coba tampilkan detail otomatis jika ID ditemukan
-        if (widget.targetId != null) {
+        // Simpan ke state lokal jika ini adalah kandidat otomatis
+        if (widget.targetId == 'AUTO_KANDIDAT') {
+          setState(() {
+            _activeAutoKandidat = widget.targetLocation;
+          });
+        }
+
+        // Coba tampilkan detail otomatis jika ID ditemukan (untuk ranking normal)
+        if (widget.targetId != null && widget.targetId != 'AUTO_KANDIDAT') {
           _repository.fetchAllLokasi().then((data) {
              final targetData = data.firstWhere(
                (d) => d['id'].toString() == widget.targetId, 
@@ -107,7 +116,6 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
       // 1. Ambil Aturan dari Supabase
       final aturanRaw = await _repository.fetchAturan();
       advanceLoading('Aturan analisis dimuat.');
-      _rules = aturanRaw;
       _bufferRules = {
         for (var a in aturanRaw) a['kode_kriteria'].toString(): (a['radius_buffer'] as num).toInt()
       };
@@ -560,6 +568,22 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
                   if (_showRoads && _roadLines.isNotEmpty) PolylineLayer(polylines: _roadLines),
                   if (_showBuffers && _circles.isNotEmpty) CircleLayer(circles: _circles),
                   if (_markers.isNotEmpty) MarkerLayer(markers: _markers),
+                  if (_activeAutoKandidat != null)
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: _activeAutoKandidat!,
+                          width: 80,
+                          height: 80,
+                          child: const Icon(
+                            Icons.stars,
+                            color: Colors.blueAccent,
+                            size: 45,
+                            shadows: [Shadow(blurRadius: 10, color: Colors.black26)],
+                          ),
+                        ),
+                      ],
+                    ),
                 ],
               ),
               // Linear Loading Bar at Top
@@ -612,20 +636,60 @@ class _MapDashboardPageState extends State<MapDashboardPage> {
                         _buildLegendItem(Icons.route, const Color(0xFF1E40AF), "Jaringan Jalan Utama"),
                         _buildLegendItem(Icons.crop_square_rounded, const Color(0xFF0F766E), "Batas Wilayah Medan Baru"),
                         const Divider(),
-                        const Text("Kriteria SAW (Dinamis):", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        ..._rules.where((r) => !['BOUNDARY', 'wilayah'].contains(r['kode_kriteria']) && !['BOUNDARY', 'wilayah'].contains(r['tipe_kriteria'])).map((rule) {
-                          final String kode = rule['kode_kriteria'] ?? '';
-                          final String nama = rule['nama_kriteria'] ?? '';
-                          
-                          IconData icon = Icons.analytics;
-                          if (kode == 'C2') icon = Icons.route;
-                          if (kode == 'C3') icon = Icons.radar;
-                          if (kode == 'C4') icon = Icons.build_circle;
-                          if (kode == 'C5') icon = Icons.straighten;
-                          
-                          return _buildLegendItem(icon, Colors.grey.shade700, "$nama ($kode)");
-                        }),
                       ],
+                    ),
+                  ),
+                ),
+              // Tombol Konfirmasi Kandidat Otomatis (Menggunakan State Lokal agar Persisten)
+              if (_activeAutoKandidat != null && widget.onConfirmSelection != null)
+                Positioned(
+                  bottom: 20,
+                  left: 20,
+                  right: 20,
+                  child: Card(
+                    elevation: 12,
+                    shadowColor: Colors.orange.withValues(alpha: 0.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFFF97316), width: 1)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(Icons.auto_awesome, color: Color(0xFFF97316), size: 20),
+                                  SizedBox(width: 8),
+                                  Text("Kandidat Strategis Ditemukan", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                ],
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 20),
+                                onPressed: () => setState(() => _activeAutoKandidat = null),
+                              )
+                            ],
+                          ),
+                          const Divider(),
+                          const SizedBox(height: 8),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              final loc = _activeAutoKandidat!;
+                              setState(() => _activeAutoKandidat = null); // Bersihkan lokal
+                              widget.onConfirmSelection!(loc); // Lanjut ke input
+                            },
+                            icon: const Icon(Icons.add_location_alt),
+                            label: const Text("LANJUT KE INPUT DATA"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFF97316),
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(double.infinity, 52),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

@@ -7,6 +7,7 @@ import 'package:sig_bengkel_motor_medan_baru/data/lokasi_repository.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/widgets/loading_overlay_card.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/widgets/overflow_marquee_text.dart';
 import 'package:sig_bengkel_motor_medan_baru/ui/widgets/supabase_status_dot.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SawProcessPage extends StatefulWidget {
   final Function(LatLng, String)? onLocationTap;
@@ -72,6 +73,31 @@ class _SawProcessPageState extends State<SawProcessPage> {
           SnackBar(content: Text("Error: $e")),
         );
       }
+    }
+  }
+
+  Future<void> _generateAutoKandidat() async {
+    setState(() {
+      _isLoading = true;
+      _loadingMessage = 'Mencari lokasi strategis otomatis...';
+    });
+    try {
+      final List<dynamic> response = await Supabase.instance.client
+          .rpc('suggest_kandidat_otomatis'); // Parameter dihapus, sistem ambil otomatis dari DB
+      
+      if (response.isNotEmpty && widget.onLocationTap != null) {
+        final item = response.first;
+        widget.onLocationTap!(LatLng(item['lat'], item['lng']), 'AUTO_KANDIDAT');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Kandidat otomatis ditemukan!")));
+        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Tidak ada kandidat ditemukan.")));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -156,6 +182,11 @@ class _SawProcessPageState extends State<SawProcessPage> {
       appBar: AppBar(
         title: const OverflowMarqueeText("Ranking Pendirian Bengkel"),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_awesome),
+            tooltip: "Cari Kandidat Otomatis",
+            onPressed: _generateAutoKandidat,
+          ),
           const SupabaseStatusDot(),
           IconButton(onPressed: _generatePdf, icon: const Icon(Icons.picture_as_pdf)),
         ],
@@ -194,9 +225,10 @@ class _SawProcessPageState extends State<SawProcessPage> {
                                       .where((r) => r['tipe_kriteria'] != 'wilayah') // Filter agar Boundary tidak muncul
                                       .map((rule) {
                                         final double bobotPct = (rule['bobot'] as num) * 100;
+                                        final int buffer = (rule['radius_buffer'] as num).toInt();
                                         return _WeightChip(
-                                          label: "${rule['kode_kriteria']} ${rule['nama_kriteria']} (${rule['tipe_kriteria']})", 
-                                          weight: "${bobotPct.toStringAsFixed(0)}%"
+                                          label: "${rule['kode_kriteria']} ${rule['nama_kriteria']}", 
+                                          weight: "${bobotPct.toStringAsFixed(0)}% | Buffer: ${buffer}m"
                                         );
                                       }).toList(),
                               ),

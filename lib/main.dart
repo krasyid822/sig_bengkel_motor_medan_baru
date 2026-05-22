@@ -81,14 +81,25 @@ class _MainPageState extends State<MainPage> {
   void initState() {
     super.initState();
     _user = Supabase.instance.client.auth.currentUser;
+    // Jika sudah login saat start, default ke halaman Input (2)
+    if (_user != null) {
+      _currentIndex = 2;
+    }
     _setupAuthListener();
     _setupSharingIntentListener();
   }
 
   void _setupAuthListener() {
     _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      final newUser = data.session?.user;
       setState(() {
-        _user = data.session?.user;
+        // Jika baru login (dari null ke user), pindah ke halaman Input (2)
+        if (_user == null && newUser != null) {
+          _currentIndex = 2;
+        }
+        
+        _user = newUser;
+
         // Jika logout dan sedang di halaman terlarang (CSV & GeoJSON), pindah ke peta
         if (_user == null && [3, 4].contains(_currentIndex)) {
           _currentIndex = 0;
@@ -137,6 +148,14 @@ class _MainPageState extends State<MainPage> {
     });
   }
 
+  // Fungsi baru untuk mengirim koordinat dari Peta ke halaman Input
+  void _onConfirmLocationToInput(LatLng location) {
+    setState(() {
+      _targetLocation = location;
+      _currentIndex = 2; // Pindah ke tab Input
+    });
+  }
+
   // Definisi semua halaman
   Widget _getPage(int index) {
     switch (index) {
@@ -150,9 +169,19 @@ class _MainPageState extends State<MainPage> {
               _targetLocationId = null;
             });
           },
+          // Callback saat user menekan "KONFIRMASI LOKASI" di peta
+          onConfirmSelection: _onConfirmLocationToInput,
         );
       case 1: return SawProcessPage(onLocationTap: _onJumpToLocation);
-      case 2: return const DataCollectionPage();
+      case 2: 
+        return DataCollectionPage(
+          initialLocation: _targetLocation,
+          onLocationHandled: () {
+            setState(() {
+              _targetLocation = null;
+            });
+          },
+        );
       case 3: return const CsvImportPage();
       case 4: return const GeoJsonImportPage();
       case 5: return const ProfilePage();

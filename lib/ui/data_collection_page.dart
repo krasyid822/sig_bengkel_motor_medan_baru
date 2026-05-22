@@ -13,11 +13,17 @@ import 'package:sig_bengkel_motor_medan_baru/ui/widgets/supabase_status_dot.dart
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DataCollectionPage extends StatefulWidget {
-  const DataCollectionPage({super.key});
+  final LatLng? initialLocation;
+  final VoidCallback? onLocationHandled;
+
+  const DataCollectionPage({super.key, this.initialLocation, this.onLocationHandled});
 
   @override
   State<DataCollectionPage> createState() => _DataCollectionPageState();
 }
+
+// Global state untuk persistensi pilihan GPS (di luar class agar tidak reset saat tab switch)
+bool _globalAutoCaptureGps = true;
 
 class _DataCollectionPageState extends State<DataCollectionPage> {
   final _formKey = GlobalKey<FormState>();
@@ -61,7 +67,40 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
   @override
   void initState() {
     super.initState();
-    _determinePosition();
+    _applyInitialState();
+  }
+
+  @override
+  void didUpdateWidget(DataCollectionPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialLocation != null && widget.initialLocation != oldWidget.initialLocation) {
+      _applyInitialState();
+    }
+  }
+
+  void _applyInitialState() {
+    final user = Supabase.instance.client.auth.currentUser;
+    setState(() {
+      // Prioritaskan kategori 'kandidat' jika datang dari navigasi target (Auto Kandidat)
+      if (widget.initialLocation != null) {
+        _kategori = 'kandidat';
+      } else {
+        _kategori = user != null ? 'bengkel' : 'kandidat';
+      }
+    });
+
+    if (widget.initialLocation != null) {
+      _latController.text = widget.initialLocation!.latitude.toString();
+      _lngController.text = widget.initialLocation!.longitude.toString();
+      _getAddressFromLatLng(widget.initialLocation!.latitude, widget.initialLocation!.longitude);
+      
+      // Beritahu MainPage bahwa lokasi target sudah ditangani agar tidak diulang
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onLocationHandled?.call();
+      });
+    } else if (_globalAutoCaptureGps) {
+      _determinePosition();
+    }
   }
 
   @override
@@ -405,6 +444,12 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
 
   Future<void> _submitData() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Jika opsi otomatis aktif dan koordinat masih kosong, ambil GPS sekarang
+    if (!_globalAutoCaptureGps && (_latController.text.isEmpty || _lngController.text.isEmpty)) {
+      await _determinePosition();
+    }
+
     final bool needsPhotoUpload = _imageFile != null;
     final int totalSteps = needsPhotoUpload ? 3 : 2;
     int completedSteps = 0;
@@ -545,17 +590,17 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
                                 {'val': 'fasum', 'label': 'FASILITAS UMUM (POINT)'},
                               ],
                             ];
-                            final hasKategori = dropdownItems.any((e) => e['val'] == _kategori);
-                            final currentKategori = hasKategori ? _kategori : 'kandidat';
-
+                            // Cek jika kategori saat ini tidak valid bagi user, reset ke kategori default
+                            final bool isValid = dropdownItems.any((item) => item['val'] == _kategori);
+                            final String displayKategori = isValid ? _kategori : (Supabase.instance.client.auth.currentUser != null ? 'bengkel' : 'kandidat');
+                            
                             return DropdownButtonFormField<String>(
-                              value: currentKategori,
+                              initialValue: displayKategori,
                               decoration: const InputDecoration(labelText: 'Kategori Data', border: OutlineInputBorder()),
                               items: dropdownItems.map((e) => DropdownMenuItem(value: e['val']!, child: Text(e['label']!))).toList(),
                               onChanged: (v) {
                                 setState(() {
                                   _kategori = v!;
-                                  // Reset is_resmi & luas_lahan if not bengkel
                                   if (_kategori != 'bengkel') {
                                     _isResmi = false;
                                     _luasLahanController.clear();
@@ -564,6 +609,17 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
                               },
                             );
                           }
+                        ),
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: _pickFromMap,
+                          icon: const Icon(Icons.map),
+                          label: const Text('Pilih Lokasi dari Peta'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 45),
+                            foregroundColor: const Color(0xFFF97316),
+                            side: const BorderSide(color: Color(0xFFF97316)),
+                          ),
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
@@ -662,45 +718,51 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        const Text('Pilih Hari Libur:', style: TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8.0,
-                          runSpacing: 4.0,
-                          children: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu', 'Hari Besar Libur'].map((day) {
-                            final isSelected = _selectedHariLibur.contains(day);
-                            return FilterChip(
-                              label: Text(day),
-                              selected: isSelected,
-                              selectedColor: const Color(0xFFF97316).withValues(alpha: 0.2),
-                              checkmarkColor: const Color(0xFFF97316),
-                              labelStyle: TextStyle(
-                                color: isSelected ? const Color(0xFFC2410C) : Colors.black87,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              ),
-                              onSelected: (selected) {
-                                setState(() {
-                                  if (selected) {
-                                    _selectedHariLibur.add(day);
-                                  } else {
-                                    _selectedHariLibur.remove(day);
-                                  }
-                                  const allDays = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu', 'Hari Besar Libur'];
-                                  _selectedHariLibur.sort((a, b) => allDays.indexOf(a).compareTo(allDays.indexOf(b)));
-                                  
-                                  if (_selectedHariLibur.isEmpty) {
-                                    _hariLiburController.text = '';
-                                  } else if (_selectedHariLibur.length == 1) {
-                                    _hariLiburController.text = _selectedHariLibur.first;
-                                  } else {
-                                    final last = _selectedHariLibur.last;
-                                    final others = _selectedHariLibur.sublist(0, _selectedHariLibur.length - 1);
-                                    _hariLiburController.text = "${others.join(', ')} dan ${last.toLowerCase()}";
-                                  }
-                                });
-                              },
-                            );
-                          }).toList(),
+                        // Pemilih Hari Libur yang Lebih Rapi
+                        InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Hari Libur Operasional',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.event_busy, color: Color(0xFFF97316)),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                          child: Wrap(
+                            spacing: 6.0,
+                            runSpacing: 0.0,
+                            children: ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu', 'Hari Besar'].map((day) {
+                              final isSelected = _selectedHariLibur.contains(day);
+                              return FilterChip(
+                                label: Text(day, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : Colors.black87)),
+                                selected: isSelected,
+                                showCheckmark: false,
+                                selectedColor: const Color(0xFFF97316),
+                                backgroundColor: Colors.grey.shade100,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? const Color(0xFFF97316) : Colors.grey.shade300)),
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      _selectedHariLibur.add(day);
+                                    } else {
+                                      _selectedHariLibur.remove(day);
+                                    }
+                                    const allDays = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu', 'Hari Besar'];
+                                    _selectedHariLibur.sort((a, b) => allDays.indexOf(a).compareTo(allDays.indexOf(b)));
+                                    
+                                    if (_selectedHariLibur.isEmpty) {
+                                      _hariLiburController.text = '';
+                                    } else if (_selectedHariLibur.length == 1) {
+                                      _hariLiburController.text = _selectedHariLibur.first;
+                                    } else {
+                                      final last = _selectedHariLibur.last;
+                                      final others = _selectedHariLibur.sublist(0, _selectedHariLibur.length - 1);
+                                      _hariLiburController.text = "${others.join(', ')} dan ${last.toLowerCase()}";
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
                         ),
                         if (_kategori == 'bengkel') ...[
                           const SizedBox(height: 16),
@@ -776,21 +838,24 @@ class _DataCollectionPageState extends State<DataCollectionPage> {
                                     padding: const EdgeInsets.all(10),
                                   ),
                                 ),
-                                const SizedBox(height: 4),
-                                Material(
-                                  color: const Color(0xFFF97316).withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: IconButton(
-                                    onPressed: _pickFromMap, 
-                                    icon: const Icon(Icons.map, color: Color(0xFFF97316)),
-                                    tooltip: 'Pilih dari Peta',
-                                    constraints: const BoxConstraints(),
-                                    padding: const EdgeInsets.all(10),
-                                  ),
-                                ),
                               ],
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 8),
+                        SwitchListTile(
+                          title: const Text('Ambil GPS Otomatis', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          subtitle: Text(_globalAutoCaptureGps ? 'GPS diambil saat halaman dibuka' : 'GPS diambil saat tombol SIMPAN ditekan', style: const TextStyle(fontSize: 11)),
+                          value: _globalAutoCaptureGps,
+                          activeThumbColor: const Color(0xFFF97316),
+                          activeTrackColor: const Color(0xFFF97316).withValues(alpha: 0.5),
+                          onChanged: (val) {
+                            setState(() {
+                              _globalAutoCaptureGps = val;
+                            });
+                          },
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
                         ),
 
                         const SizedBox(height: 20),
