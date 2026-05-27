@@ -33,15 +33,11 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Build APK (ARM64)
+      - name: Build APKs (Split per ABI)
         run: |
-          flutter build apk --target-platform=android-arm64 --release
-          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/sig-bengkel-medan-baru-arm64.apk
-
-      - name: Build APK (ARM 32-bit)
-        run: |
-          flutter build apk --target-platform=android-arm --release
-          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/sig-bengkel-medan-baru-arm32.apk
+          flutter build apk --split-per-abi --release
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk build/app/outputs/flutter-apk/sig-bengkel-medan-baru-arm64.apk
+          mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk build/app/outputs/flutter-apk/sig-bengkel-medan-baru-arm32.apk
 
       - name: Generate Version Tag
         id: tag

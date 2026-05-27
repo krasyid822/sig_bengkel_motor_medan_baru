@@ -114,8 +114,8 @@ class _MapPickerPageState extends State<MapPickerPage> {
       List<Marker> markers = [];
       List<CircleMarker> circles = [];
       
-      final double radiusAkses = (_bufferRules['C2'] ?? 200).toDouble();
-      final double radiusPesaing = (_bufferRules['C3'] ?? 500).toDouble();
+      final double radiusFasum = (_bufferRules['C3'] ?? 200).toDouble();
+      final double radiusPesaing = (_bufferRules['C4'] ?? 500).toDouble();
 
       for (var item in dataLocations) {
         final dynamic geomData = item['geometry_json'];
@@ -143,11 +143,11 @@ class _MapPickerPageState extends State<MapPickerPage> {
         } else if (kategori == 'bengkel') {
           themeColor = const Color(0xFFEF4444);
           iconData = Icons.build;
-          bufferRadius = radiusPesaing;
+          bufferRadius = radiusPesaing; // Menggunakan C4 (500m)
         } else {
           themeColor = const Color(0xFF38BDF8);
           iconData = Icons.radar;
-          bufferRadius = radiusAkses;
+          bufferRadius = radiusFasum; // Menggunakan C3 (200m)
         }
 
         markers.add(Marker(

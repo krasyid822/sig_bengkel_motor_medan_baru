@@ -113,6 +113,48 @@ class DocumentationPage extends StatelessWidget {
             Icons.web,
           ),
 
+          const SizedBox(height: 12),
+          // 6. Penjelasan Teknis & Algoritma (Q&A)
+          _buildHeaderSection("V. Tanya Jawab Teknis & Algoritma Spasial"),
+          _buildDetailedSection(
+            'Bagaimana perhitungan jarak dan pembentukan rekomendasi SAW?',
+            '• Perhitungan Jarak Spasial:\n'
+            '  Jarak dihitung langsung di level database (server-side) menggunakan fungsi spasial PostGIS ST_Distance(geom1, geom2). Unit derajat secara akurat dipetakan ke satuan meter bumi berdasarkan ellipsoid WGS84.\n\n'
+            '• Pembentukan Rekomendasi (Metode SAW):\n'
+            '  1. Kriteria C2 (Aksesibilitas): Diukur dari ST_Distance(kandidat, jalan). Bertipe "Cost" (semakin dekat dengan jalan utama semakin optimal).\n'
+            '  2. Kriteria C3 (Jarak Pesaing): Diukur dari ST_Distance(kandidat, bengkel_kompetitor). Bertipe "Benefit" (semakin jauh dari kompetitor terdekat semakin optimal untuk meminimalkan persaingan).\n'
+            '  3. Kriteria C4 (Status Kemitraan): Berdasarkan boolean is_resmi bengkel (Benefit).\n'
+            '  4. Kriteria C5 (Luas Lahan): Berdasarkan luas_lahan fisik kandidat (Benefit).\n\n'
+            '• Normalisasi & Skor Akhir:\n'
+            '  Seluruh nilai kriteria dinormalisasi otomatis di database sesuai tipenya (cost/benefit) ke rentang 0.0 - 1.0. Skor akhir dihitung dengan menjumlahkan perkalian nilai kriteria yang ternormalisasi dengan bobot masing-masing (C2=40%, C3=30%, C4=15%, C5=15%). Peringkat kelayakan tertinggi diurutkan berdasarkan skor akhir terbesar.',
+            Icons.help_outline,
+          ),
+          _buildDetailedSection(
+            'Bagaimana implementasi filter Point-in-Line dan Point-in-Polygon?',
+            '• Filter Point-in-Polygon (Titik di dalam Area):\n'
+            '  1. Batas Wilayah Administratif: Digunakan untuk menyaring agar lokasi kandidat mutlak berada di dalam area Kecamatan Medan Baru menggunakan fungsi spasial ST_Contains atau ST_Within antara geometri Polygon batas wilayah dengan Point kandidat.\n'
+            '  2. Grid Discovery pada Pencarian Otomatis: Fungsi database RPC "suggest_kandidat_otomatis" menggunakan ST_GeneratePoints(polygon, 50) untuk secara cerdas menaburkan titik sampel acak yang dijamin berada di dalam batas administratif poligon.\n\n'
+            '• Filter Point-in-Line (Titik ke Garis):\n'
+            '  Digunakan dalam perhitungan kriteria C2 (Aksesibilitas) untuk mengukur jarak tegak lurus terpendek dari Point (lokasi kandidat) ke LineString/MultiLineString (jaringan jalan utama) menggunakan fungsi ST_Distance di PostgreSQL.',
+            Icons.filter_alt,
+          ),
+          _buildDetailedSection(
+            'Bagaimana penerapan legenda, marker, dan simbologi di peta?',
+            '• Simbologi Marker Dinamis (Sesuai Rank & Kategori):\n'
+            '  1. Bengkel Kompetitor: Ikon kunci inggris (Icons.build) merah kontras (#EF4444) menandai area persaingan tinggi.\n'
+            '  2. Fasilitas Umum (Fasum): Ikon radar (Icons.radar) biru muda (#38BDF8).\n'
+            '  3. Kandidat Strategis (Hasil SAW):\n'
+            '     - Peringkat 1 (Sangat Strategis): Ikon bintang hijau zamrud (#10B981) + Lencana "RANK 1".\n'
+            '     - Peringkat 2-3 (Potensial): Ikon bintang emas (#F59E0B) + Lencana peringkat.\n'
+            '     - Peringkat >3 (Kurang Strategis): Ikon bintang oranye (#F97316) + Lencana peringkat.\n\n'
+            '• Simbologi Buffer & Vektor:\n'
+            '  - Area Buffer: Layer lingkaran transparan di sekitar bengkel kompetitor (radius 500m) dan fasum (radius 200m) untuk menggambarkan jangkauan pasar secara spasial.\n'
+            '  - Batas Wilayah: Poligon berwarna hijau toska transparan dengan batas garis luar tegas.\n\n'
+            '• Legenda Peta:\n'
+            '  Panel legenda apung (Floating Legend) interaktif disematkan di pojok kiri bawah peta untuk memandu pengguna mengenali makna visual dari setiap marker, buffer, jalan utama, dan poligon wilayah.',
+            Icons.legend_toggle,
+          ),
+
           const SizedBox(height: 30),
           const Divider(),
           const Center(
@@ -149,12 +191,12 @@ class DocumentationPage extends StatelessWidget {
             _IdentityRow(label: 'Dosen', value: 'Donny Sanjaya, M.Kom'),
             SizedBox(height: 16),
             Text('Anggota Tim:', style: TextStyle(color: Color(0xFFF97316), fontSize: 12, fontWeight: FontWeight.bold)),
-            SizedBox(height: 4),
-            Text('• Rasyid Kurniawan (2305181077)', style: TextStyle(color: Colors.white, fontSize: 14)),
-            Text('• Putri Aprilia (2305181009)', style: TextStyle(color: Colors.white, fontSize: 14)),
-            Text('• M Rizky Andika', style: TextStyle(color: Colors.white, fontSize: 14)),
-            Text('• Azura T Barus', style: TextStyle(color: Colors.white, fontSize: 14)),
-            Text('• Kevin', style: TextStyle(color: Colors.white, fontSize: 14)),
+            SizedBox(height: 12),
+            _TeamMemberRow(name: 'Rasyid Kurniawan', nim: '2305181077', imagePath: 'assets/images/rasyid.jpeg'),
+            _TeamMemberRow(name: 'Putri Aprilia', nim: '2305181009', imagePath: ''),
+            _TeamMemberRow(name: 'M Rizky Andika', nim: 'q', imagePath: ''),
+            _TeamMemberRow(name: 'Azura T Barus', nim: '2305181021', imagePath: ''),
+            _TeamMemberRow(name: 'Kevin', nim: '2305181097', imagePath: ''),
           ],
         ),
       ),
@@ -191,7 +233,12 @@ class DocumentationPage extends StatelessWidget {
               children: [
                 Icon(icon, color: const Color(0xFFF97316), size: 24),
                 const SizedBox(width: 12),
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1E293B))),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1E293B)),
+                  ),
+                ),
               ],
             ),
             const Padding(
@@ -223,6 +270,62 @@ class _IdentityRow extends StatelessWidget {
           SizedBox(width: 80, child: Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13))),
           const Text(': ', style: TextStyle(color: Colors.white70)),
           Expanded(child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600))),
+        ],
+      ),
+    );
+  }
+}
+
+class _TeamMemberRow extends StatelessWidget {
+  final String name;
+  final String nim;
+  final String? imagePath;
+
+  const _TeamMemberRow({
+    required this.name,
+    required this.nim,
+    this.imagePath,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: const Color(0xFFF97316).withValues(alpha: 0.15),
+            backgroundImage: imagePath != null && imagePath!.isNotEmpty
+                ? AssetImage(imagePath!)
+                : null,
+            child: imagePath == null || imagePath!.isEmpty
+                ? const Icon(Icons.person, color: Color(0xFFF97316), size: 20)
+                : null,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  nim.isNotEmpty ? nim : 'NIM tidak tersedia',
+                  style: TextStyle(
+                    color: nim.isNotEmpty ? Colors.white70 : Colors.white38,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
