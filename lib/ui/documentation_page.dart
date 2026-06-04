@@ -194,7 +194,7 @@ class DocumentationPage extends StatelessWidget {
             SizedBox(height: 12),
             _TeamMemberRow(name: 'Rasyid Kurniawan', nim: '2305181077', imagePath: 'assets/images/rasyid.jpeg'),
             _TeamMemberRow(name: 'Putri Aprilia', nim: '2305181009', imagePath: ''),
-            _TeamMemberRow(name: 'M Rizky Andika', nim: 'q', imagePath: ''),
+            _TeamMemberRow(name: 'M Rizky Andika', nim: '2305181101', imagePath: ''),
             _TeamMemberRow(name: 'Azura T Barus', nim: '2305181021', imagePath: ''),
             _TeamMemberRow(name: 'Kevin', nim: '2305181097', imagePath: ''),
           ],
