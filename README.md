@@ -1,3 +1,5 @@
+
+![](./assets/demo/img_b3477484.png)
 # sig_bengkel_motor_medan_baru
 
 Aplikasi penginputan data dan untuk penampil map. anggota kelompok; rasyid, putri, rizky, azura, kevin
